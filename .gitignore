@@ -1,0 +1,64 @@
+# Python
+.venv/
+.venv_ros2/
+**/.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# C/C++ build
+build/
+cmake-build-*/
+*.o
+*.so
+*.exe
+
+# ROS2 / colcon
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
+ros2_ws/Logs/
+**/build/
+**/install/
+**/log/
+
+# Sensor experiment build artifacts
+sensors/*/cpp/build/
+
+
+
+# Data
+data/*
+!data/.gitkeep
+
+# Large logs
+Logs/
+**/Logs/
+*.bag
+*.db3
+*.mcap
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# uv
+.uv/
+
+# Python version file (local override)
+.python-version
+
+# Sphinx docs build (any level)
+_build/
