@@ -265,7 +265,6 @@ class PtsSession:
         return self._last_timestamp_us is None or timestamp_us > self._last_timestamp_us
 
 
-
 def acquisition_worker(
     port: str,
     rate_hz: int,

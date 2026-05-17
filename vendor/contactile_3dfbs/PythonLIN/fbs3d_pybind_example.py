@@ -28,10 +28,10 @@ def main():
     is_logging = True
 
     # 串口连接参数
-    port = "/dev/ttyACM0"                                    # Linux 串口设备
-    rate = 115200                                            # 波特率
-    parity = 0                                               # 校验位 (0=无)
-    byte_size = ""                                     # 数据位 (8 bits)
+    port = "/dev/ttyACM0"  # Linux 串口设备
+    rate = 115200  # 波特率
+    parity = 0  # 校验位 (0=无)
+    byte_size = ""  # 数据位 (8 bits)
     # 日志写入频率 (Hz)
     log_file_rate = FBS3D_CXX_Pybind.PTSDKConstants.LOG_RATE_100
 

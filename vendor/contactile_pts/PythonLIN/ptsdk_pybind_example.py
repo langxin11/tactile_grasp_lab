@@ -30,11 +30,11 @@ def main():
     is_logging = True
 
     # 串口连接参数
-    port = "/dev/ttyACM0"                                         # Linux 串口设备
-    rate = 115200                                                 # 波特率
-    parity = 0                                                    # 校验位 (0=无)
-    byte_size = ""                                          # 数据位 (8 bits)
-    is_flush = True                                               # 缓冲区积压时清空
+    port = "/dev/ttyACM0"  # Linux 串口设备
+    rate = 115200  # 波特率
+    parity = 0  # 校验位 (0=无)
+    byte_size = ""  # 数据位 (8 bits)
+    is_flush = True  # 缓冲区积压时清空
 
     # =========================================================================
     # 初始化传感器与监听器
@@ -59,9 +59,7 @@ def main():
 
     if is_multithreaded:
         # 连接串口并启动后台监听线程
-        res = listener.connectAndStartListening(
-            port, rate, parity, byte_size, is_flush
-        )
+        res = listener.connectAndStartListening(port, rate, parity, byte_size, is_flush)
         if res == 0:
             print("main(): 成功连接串口并启动后台监听")
         else:
@@ -77,9 +75,7 @@ def main():
             exit(1)
 
         # 设置采样率为 500 Hz
-        res = listener.setSamplingRate(
-            PTSDK_CXX_Pybind.PTSDKConstants.SAMP_RATE_500
-        )
+        res = listener.setSamplingRate(PTSDK_CXX_Pybind.PTSDKConstants.SAMP_RATE_500)
         if res:
             print("main(): 采样率设置成功 (500 Hz)")
         else:

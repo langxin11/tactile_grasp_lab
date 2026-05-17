@@ -177,8 +177,7 @@ def _check_port(port: str) -> None:
     """预检查串口设备是否存在，避免 SDK 阻塞 I/O 时 Ctrl+C 无法中断。"""
     if not os.path.exists(port):
         raise FileNotFoundError(
-            f"串口设备不存在: {port}\n"
-            "提示: 检查 USB 连接，或运行 scripts/check_usb.sh"
+            f"串口设备不存在: {port}\n提示: 检查 USB 连接，或运行 scripts/check_usb.sh"
         )
 
 
@@ -272,9 +271,7 @@ class SensorSession:
             self.listener.addSensor(sensor)
 
         try:
-            typer.echo(
-                f"连接串口: {self.port} @ {BAUD_RATE} baud, 目标 {self.rate_hz} Hz..."
-            )
+            typer.echo(f"连接串口: {self.port} @ {BAUD_RATE} baud, 目标 {self.rate_hz} Hz...")
             result = self.listener.connectAndStartListening(
                 self.port,
                 BAUD_RATE,
@@ -354,9 +351,7 @@ class SensorSession:
             "软件基准采样中（请保持传感器无负载）: "
             f"{self.baseline_duration_sec:.1f}s, std limit={self.baseline_std_limit_n:.3f} N"
         )
-        values: dict[int, list[Sample]] = {
-            sensor_index: [] for sensor_index in sensor_indices
-        }
+        values: dict[int, list[Sample]] = {sensor_index: [] for sensor_index in sensor_indices}
         last_timestamp_us: dict[int, int] = {}
         deadline = time.monotonic() + self.baseline_duration_sec
         sleep_sec = max(0.0002, min(0.002, 0.5 / self.rate_hz))
@@ -373,8 +368,7 @@ class SensorSession:
         for sensor_index, samples in values.items():
             if len(samples) < MIN_BASELINE_SAMPLES:
                 raise RuntimeError(
-                    f"S{sensor_index} 软件基准样本不足: "
-                    f"{len(samples)} < {MIN_BASELINE_SAMPLES}"
+                    f"S{sensor_index} 软件基准样本不足: {len(samples)} < {MIN_BASELINE_SAMPLES}"
                 )
             fx_values = [sample.fx for sample in samples]
             fy_values = [sample.fy for sample in samples]
@@ -498,8 +492,7 @@ def csv_writer(path: Optional[str]) -> Iterator[Optional[csv.DictWriter]]:
 def _print_header() -> None:
     """打印终端表格表头。"""
     typer.echo(
-        f"{'#':>6s}  {'T(us)':>12s}  {'FX(N)':>9s}  "
-        f"{'FY(N)':>9s}  {'FZ(N)':>9s}  {'|F|(N)':>9s}"
+        f"{'#':>6s}  {'T(us)':>12s}  {'FX(N)':>9s}  {'FY(N)':>9s}  {'FZ(N)':>9s}  {'|F|(N)':>9s}"
     )
 
 
@@ -572,19 +565,13 @@ def _summarize(samples: list[Sample], label: str = "Summary") -> None:
         for i in range(1, len(samples))
         if samples[i].timestamp_us > samples[i - 1].timestamp_us
     ]
-    elapsed_sec = max(
-        (samples[-1].timestamp_us - samples[0].timestamp_us) / 1_000_000.0, 0.0
-    )
-    measured_hz = (
-        (len(samples) - 1) / elapsed_sec if elapsed_sec > 0 and len(samples) > 1 else 0.0
-    )
+    elapsed_sec = max((samples[-1].timestamp_us - samples[0].timestamp_us) / 1_000_000.0, 0.0)
+    measured_hz = (len(samples) - 1) / elapsed_sec if elapsed_sec > 0 and len(samples) > 1 else 0.0
     norms = [s.force_norm for s in samples]
     typer.echo(f"\n{label}:")
     typer.echo(f"  samples: {len(samples)}")
     typer.echo(f"  measured rate: {measured_hz:.1f} Hz")
-    typer.echo(
-        f"  force norm mean/max: {statistics.fmean(norms):.4f} / {max(norms):.4f} N"
-    )
+    typer.echo(f"  force norm mean/max: {statistics.fmean(norms):.4f} / {max(norms):.4f} N")
     if intervals:
         typer.echo(
             "  interval ms mean/min/max/stdev: "
@@ -761,8 +748,7 @@ def read(
     """
     if not confirm_no_load:
         typer.secho(
-            "拒绝执行：bias 校准前必须确认传感器无负载。"
-            "请添加 --confirm-no-load。",
+            "拒绝执行：bias 校准前必须确认传感器无负载。请添加 --confirm-no-load。",
             err=True,
         )
         raise typer.Exit(code=2)
@@ -844,8 +830,7 @@ def record(
     """
     if not confirm_no_load:
         typer.secho(
-            "拒绝执行：bias 校准前必须确认传感器无负载。"
-            "请添加 --confirm-no-load。",
+            "拒绝执行：bias 校准前必须确认传感器无负载。请添加 --confirm-no-load。",
             err=True,
         )
         raise typer.Exit(code=2)
@@ -961,17 +946,14 @@ def live(
     """
     if not confirm_no_load:
         typer.secho(
-            "拒绝执行：bias 校准前必须确认传感器无负载。"
-            "请添加 --confirm-no-load。",
+            "拒绝执行：bias 校准前必须确认传感器无负载。请添加 --confirm-no-load。",
             err=True,
         )
         raise typer.Exit(code=2)
     try:
         import dearpygui.dearpygui as dpg
     except ImportError as exc:
-        raise RuntimeError(
-            "live 需要 Dear PyGui。请在 python_ws 下运行: uv sync"
-        ) from exc
+        raise RuntimeError("live 需要 Dear PyGui。请在 python_ws 下运行: uv sync") from exc
 
     sensors = _parse_sensor_list(sensors_arg) if sensors_arg else [sensor]
     if len(sensors) > 2:
@@ -995,10 +977,7 @@ def live(
     worker.start()
 
     if output and len(sensors) > 1:
-        typer.echo(
-            "提示: 多传感器 live 暂不写 CSV；"
-            "如需记录，请先分别运行单传感器 --sensor。"
-        )
+        typer.echo("提示: 多传感器 live 暂不写 CSV；如需记录，请先分别运行单传感器 --sensor。")
 
     dpg.create_context()
 
@@ -1235,8 +1214,7 @@ def check(
     """
     if not confirm_no_load:
         typer.secho(
-            "拒绝执行：bias 校准前必须确认传感器无负载。"
-            "请添加 --confirm-no-load。",
+            "拒绝执行：bias 校准前必须确认传感器无负载。请添加 --confirm-no-load。",
             err=True,
         )
         raise typer.Exit(code=2)

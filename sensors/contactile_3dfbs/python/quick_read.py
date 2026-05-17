@@ -24,7 +24,7 @@ def main():
     port = args.port
     rate = 115200
     parity = 0
-    byte_size = '\x08'
+    byte_size = "\x08"
     log_rate = fbs.PTSDKConstants.LOG_RATE_100
 
     # 预检查：避免进入 C++ 阻塞调用导致 Ctrl+C 失效
