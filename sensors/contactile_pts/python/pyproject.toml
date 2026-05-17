@@ -1,0 +1,50 @@
+[project]
+name = "contactile-pts-lab"
+version = "0.1.0"
+description = "Contactile PTS Lab Python workspace"
+requires-python = "==3.10.*"
+dependencies = [
+    "dearpygui>=2.3.1",
+    "ptsdk-cxx-pybind",
+    "typer>=0.25.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "typer>=0.12.0",
+    "rich>=13.0.0",
+]
+
+[tool.ruff]
+line-length = 100
+select = ["D", "E", "F", "I", "W", "UP"]
+ignore = ["E501", "D203", "D213", "D100", "D104"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.format]
+quote-style = "double"
+docstring-code-format = true
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra -q --tb=short"
+testpaths = ["tests"]
+
+[tool.uv.sources]
+ptsdk-cxx-pybind = { path = "../../vendor/contactile_pts/PythonLIN/ptsdk_cxx_pybind-1.0.2-cp310-cp310-linux_x86_64.whl" }
+
+[dependency-groups]
+dev = [
+    "furo>=2025.12.19",
+    "myst-parser>=4.0.1",
+    "sphinx>=8.1.3",
+]
