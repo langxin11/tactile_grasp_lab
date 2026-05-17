@@ -1,0 +1,17 @@
+string state
+string detail
+bool dry_run
+bool connected
+bool synthetic_feedback
+uint8 gripper_status
+uint8 fault_status
+string fault_text
+uint8 position_request_echo
+uint8 position
+uint8 current
+int32 current_milliamps
+uint8 activation_state
+uint8 activation_echo
+uint8 go_to_echo
+uint8 object_status
+bool is_activation_complete

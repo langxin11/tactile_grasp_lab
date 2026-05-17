@@ -1,0 +1,24 @@
+robotiq_2f85_driver:
+  ros__parameters:
+    # 真机夹爪配置：
+    # 串口值按本机实际 /dev/ttyUSB* 修改。
+    serial_port: "/dev/ttyUSB0"
+    baudrate: 115200
+    slave_address: 9
+    default_speed: 10
+    default_force: 10
+
+    # 真机 bringup 由协调节点显式调用 /robotiq/activate，
+    # 不在 driver 启动时自动激活，便于把时序和 tactile bias 对齐。
+    startup_activate: false
+    dry_run: false
+    command_topic: "/robotiq/command/position"
+    command_echo_topic: "/robotiq/command/echo"
+    status_topic: "/robotiq/driver/status"
+    gripper_action_name: "/robotiq_gripper_controller/gripper_cmd"
+    feedback_poll_hz: 10.0
+    gripper_closed_position: 0.8
+    action_max_force: 235.0
+    action_timeout_s: 5.0
+    action_position_tolerance: 2
+    autostart: true

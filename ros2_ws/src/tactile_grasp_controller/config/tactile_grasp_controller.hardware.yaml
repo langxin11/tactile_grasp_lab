@@ -1,0 +1,39 @@
+tactile_grasp_controller:
+  ros__parameters:
+    # 真机配置：
+    # controller 默认允许真实发命令，但仍保持 auto_start: false。
+    # 这样 bringup 先做 bias 和夹爪初始化，再决定何时进入闭环。
+    left_tactile_topic: "/hub_0/sensor_0"
+    right_tactile_topic: "/hub_0/sensor_1"
+    gripper_command_action: "/robotiq_gripper_controller/gripper_cmd"
+    gripper_open_position: 0.0
+    gripper_closed_position: 0.8
+    gripper_max_effort: 10.0
+    wait_for_action_server_s: 2.0
+    gripper_command_topic: "/robotiq/command/position"
+    gripper_command_echo_topic: "/robotiq/command/echo"
+    debug_topic: "/tactile_grasp/debug"
+    state_topic: "/tactile_grasp/state"
+    # 真机抓取把控制频率提到 40 Hz，减轻 +1 步进带来的顿挫感，
+    # 同时仍避免把 Robotiq 当作高频力控执行器。
+    control_rate_hz: 40.0
+    auto_start: false
+    dry_run: false
+    tactile_timeout_s: 0.2
+    left_normal_sign: 1.0
+    right_normal_sign: 1.0
+    approach_position_step: 1
+    preload_position_step: 1
+    compensate_position_step: 2
+    min_position: 0
+    max_position: 255
+    initial_position: 0
+    min_preload_force_n: 3.0
+    min_hold_force_n: 2.0
+    max_safe_force_n: 20.0
+    max_safe_force_consecutive_frames: 3
+    friction_mu_default: 0.4
+    friction_mu_min: 0.2
+    friction_margin_threshold_n: 0.5
+    slip_compensate_cooldown_s: 0.3
+    fault_action: "hold"

@@ -1,0 +1,31 @@
+hardware_bringup_coordinator:
+  ros__parameters:
+    # 触觉与 bringup 状态 topic。
+    left_tactile_topic: "/hub_0/sensor_0"
+    right_tactile_topic: "/hub_0/sensor_1"
+    status_topic: "/tactile_grasp/hardware_bringup_status"
+
+    # 真机 bringup 时先等待传感器稳定，再做 bias。
+    perform_bias: true
+    tactile_stable_s: 1.0
+    bias_settle_s: 0.5
+    bias_service: "/hub_0/send_bias_request"
+
+    # 新夹爪执行层：
+    # 先调用 legacy activate 服务，再等待 GripperCommand action server 发送一次 open goal，
+    # 把控制器初始位置和真实夹爪对齐到全开附近。
+    gripper_activate_service: "/robotiq/activate"
+    gripper_command_action: "/robotiq_gripper_controller/gripper_cmd"
+    gripper_open_position: 0.0
+    gripper_max_effort: 10.0
+    wait_for_action_server_s: 2.0
+
+    # 默认不自动启动 controller 闭环，只把系统带到“传感器归零 + 夹爪就绪”状态。
+    # 自动抓取时，open 后再等 post_open_settle_s，避开启动瞬时尖峰。
+    call_controller_start: false
+    post_open_settle_s: 0.5
+    controller_start_service: "/tactile_grasp/start"
+
+    # 单次服务或 action 等待超时。
+    service_timeout_s: 5.0
+    action_timeout_s: 5.0

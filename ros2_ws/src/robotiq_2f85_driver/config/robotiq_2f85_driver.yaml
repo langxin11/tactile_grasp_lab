@@ -1,0 +1,43 @@
+robotiq_2f85_driver:
+  ros__parameters:
+    # 串口参数：
+    # 真实夹爪通常挂在 /dev/ttyUSB*，首次联调前先用 ls /dev/ttyUSB* 确认。
+    serial_port: "/dev/ttyUSB0"
+    baudrate: 115200
+    slave_address: 9
+
+    # 默认速度和力度：
+    # 第一版保持保守小值，避免激活或闭合时动作过猛。
+    default_speed: 10
+    default_force: 10
+
+    # 启动后是否自动执行 activate。
+    # 真机首次联调建议保持 false，手工确认更稳。
+    startup_activate: false
+
+    # 安全默认值：
+    # true 时只维护命令回显，不真正写串口。
+    dry_run: false
+
+    # ROS2 接口：
+    # /robotiq/command/position 接收控制器或人工发布的位置命令。
+    # /robotiq/command/echo 发布最近一次接受的命令位置，不是硬件实测位置。
+    command_topic: "/robotiq/command/position"
+    command_echo_topic: "/robotiq/command/echo"
+    status_topic: "/robotiq/driver/status"
+    gripper_action_name: "/robotiq_gripper_controller/gripper_cmd"
+
+    # 后台状态轮询频率：
+    # Robotiq 2F-85 在激活后如果超过约 1 秒没有通信，可能报 0x09 故障。
+    # 因此真机模式需要持续读状态寄存器做保活。
+    feedback_poll_hz: 10.0
+
+    # Action 语义映射：
+    # action position 的闭合端和 max_effort 的物理上限。
+    gripper_closed_position: 0.8
+    action_max_force: 235.0
+    action_timeout_s: 5.0
+    action_position_tolerance: 2
+
+    # 默认作为 bringup 主路径自动 configure + activate lifecycle。
+    autostart: true
