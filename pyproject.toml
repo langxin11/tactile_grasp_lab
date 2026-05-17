@@ -1,0 +1,48 @@
+[project]
+name = "tactile-grasp-lab"
+version = "0.1.0"
+description = "触觉抓取实验平台 — 集成 Contactile PTS/3DFBS 传感器与 Robotiq 2F-85 指爪"
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [
+    { name = "langxin11" }
+]
+dependencies = [
+    "pymodbus>=3.13.0",
+    "pyserial>=3.5",
+    "pytest>=9.0.3",
+    "ruff>=0.15.13",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.3.0",
+    "mypy>=1.8.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["D", "E", "F", "I", "W", "UP"]
+ignore = ["E501", "D203", "D213", "D100", "D104", "D415"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.format]
+quote-style = "double"
+docstring-code-format = true
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra -q --tb=short"
+testpaths = ["tests"]
