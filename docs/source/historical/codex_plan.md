@@ -1,5 +1,12 @@
 # Historical tactile grasp controller plan
 
+:::{admonition} 历史文档
+:class: warning
+
+本文档为早期规划记录，**不代表当前架构**。当前默认架构与状态请看：
+[架构总览](../overview/architecture.md)、[快速上手](../overview/getting_started.md)、[硬件联调](../hardware/bringup.md)。
+:::
+
 ## 0. 文档定位
 
 本文档是早期规划记录，不再代表当前默认架构。
@@ -7,9 +14,9 @@
 当前仓库的默认夹爪执行层已经收敛到 Python `robotiq_2f85_driver`
 包。当前架构和迁移状态优先看：
 
-- [README.md](/home/xiaodalaing/project/tactile_grasp_lab/README.md)
-- [docs/ros2_repository_architecture.md](/home/xiaodalaing/project/tactile_grasp_lab/docs/ros2_repository_architecture.md)
-- [HARDWARE_BRINGUP.md](/home/xiaodalaing/project/tactile_grasp_lab/HARDWARE_BRINGUP.md)
+- [架构总览](../overview/architecture.md)
+- [快速上手](../overview/getting_started.md)
+- [硬件联调](../hardware/bringup.md)
 
 ---
 

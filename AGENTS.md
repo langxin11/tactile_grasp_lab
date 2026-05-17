@@ -10,7 +10,7 @@
 - 约束高风险改动，尤其是真机相关路径；
 - 约定人类开发者和 agent 的默认工作方式。
 
-关于 ROS2 的目标架构与迁移方向，见 [docs/ros2_repository_architecture.md](/home/xiaodalaing/project/tactile_grasp_lab/docs/ros2_repository_architecture.md)。
+关于 ROS2 的目标架构与迁移方向，见 [docs/source/overview/architecture.md](/home/xiaodalaing/project/tactile_grasp_lab/docs/source/overview/architecture.md)。
 
 ---
 
@@ -166,4 +166,4 @@ agent 必须：
 
 - 提交尽量小而清晰；
 - 文档、结构、实现、测试优先分开提交；
-- 若目标架构发生变化，优先更新 `docs/ros2_repository_architecture.md`，不要把设计讨论继续堆进 `AGENTS.md`。
+- 若目标架构发生变化，优先更新 `docs/source/overview/architecture.md`，不要把设计讨论继续堆进 `AGENTS.md`。

@@ -224,3 +224,15 @@ ros2 launch tactile_grasp_controller tactile_grasp_bringup.launch.py start_contr
 真机分阶段联调手册见：
 
 - [HARDWARE_BRINGUP.md](/home/xiaodalaing/project/tactile_grasp_lab/HARDWARE_BRINGUP.md)
+
+## 文档
+
+Sphinx 文档源码在 `docs/source/`，构建产物在 `docs/_build/`（已 gitignore）。
+
+```bash
+source .venv/bin/activate
+uv sync --extra docs
+cd docs
+make html       # 浏览器打开 docs/_build/html/index.html
+make strict     # 把警告当错误，CI 模式
+```
