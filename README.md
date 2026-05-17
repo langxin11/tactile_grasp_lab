@@ -56,6 +56,7 @@ tactile_grasp_lab/
 
 - 当前默认 Robotiq 2F-85 执行层；
 - Python `pymodbus` + lifecycle + 单线程硬件 worker；
+- 内部按 `Driver` Protocol + `PymodbusDriver`（真硬件）+ `FakeDriver`（内存模拟）三件套组织，由 node 在 `on_configure` 根据 `dry_run` 参数择一注入；
 - 对上提供 `/robotiq_gripper_controller/gripper_cmd` action；
 - 同时保留 legacy `/robotiq/command/position` 和 Trigger 服务作为兼容入口。
 

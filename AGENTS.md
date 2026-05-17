@@ -27,7 +27,6 @@
   - `sensor_interfaces`
   - `papillarray_ros2_v2`
   - `robotiq_2f85_driver`
-  - `robotiq_2f85_gripper_execution`
   - `tactile_grasp_controller`
   - `contactile_visualizer`
   - `buttonsensor_ros2_v1`
@@ -69,10 +68,8 @@
 包职责边界：
 
 - `robotiq_2f85_driver`
-  - 作为 legacy Python/pymodbus 回退路径保留；
-  - 不作为默认 bringup 主路径。
-- `robotiq_2f85_gripper_execution`
-  - 负责默认 Robotiq 2F-85 ros2_control 执行层；
+  - 当前默认 Robotiq 2F-85 执行层（Python + pymodbus + lifecycle + GripperCommand action）；
+  - 内部按 `Driver` Protocol + `PymodbusDriver`（真硬件）+ `FakeDriver`（内存模拟）三件套组织，由 node 在 `on_configure` 根据 `dry_run` 参数择一注入；
   - 不负责触觉特征提取、状态机或策略。
 - `tactile_grasp_controller`
   - 负责触觉特征、状态机、闭环控制编排；
@@ -115,13 +112,14 @@ Python 代码：
 - 新代码默认带类型标注；
 - 公共类、函数、模块写简短 docstring；
 - 代码风格以 PEP 8 为基础，优先采用中文 Google Python 风格指南；
-- `*_node.py` 负责节点装配，`*_core.py` 负责底层逻辑；
+- `*_node.py` 负责节点装配，底层逻辑放专门的实现模块（如 `pymodbus_driver.py` / `fake_driver.py`），由 Protocol 统一接口契约；
 - 纯计算与 side effect 分离；
 - 异常处理必须可诊断，不能静默吞错。
 
 测试：
 
 - 优先做纯逻辑单元测试；
+- 单测应通过 Protocol 的 Fake 实现脱离硬件运行，禁止直接 mock 第三方库内部 API；
 - 真机相关测试不得进入默认自动化测试；
 - `dry_run` 分支应可测试。
 

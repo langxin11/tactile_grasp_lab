@@ -1,41 +1,15 @@
-"""RobotiqDriverCore 单元测试。
+"""PymodbusDriver 单元测试。
 
-测试驱动核心在 dry-run 和仿真硬件模式下的行为，验证寄存器编解码、
-命令记录以及 Modbus 通信流程的正确性。
+通过 monkeypatch 注入仿真的 Modbus 客户端，验证寄存器编解码、命令载荷
+打包以及运动完成判定逻辑，覆盖原 RobotiqDriverCore 的 non-dry-run 路径。
 """
 
 from types import SimpleNamespace
 
 import pytest
-
-import robotiq_2f85_driver.robotiq_driver_core as driver_core
-from robotiq_2f85_driver.robotiq_driver_core import RobotiqDriverCore
-
-# =============================================================================
-# 测试用例
-# =============================================================================
-
-
-def test_dry_run_move_records_last_command() -> None:
-    """验证 dry-run 模式下 move() 能正确记录最后一条命令。
-
-    测试要点：
-    - 连接状态应为 True
-    - last_command 不应为 None
-    - 记录的位置值应与请求一致
-    - simulated 标志应为 True
-    """
-    core = RobotiqDriverCore(dry_run=True)
-    core.connect()
-    core.move(position=64, speed=11, force=12)
-
-    assert core.connected is True
-    assert core.last_command is not None
-    assert core.last_command.position == 64
-    assert core.last_command.simulated is True
-    assert core.last_feedback is not None
-    assert core.last_feedback.position == 64
-    assert core.last_feedback.is_activation_complete is True
+from robotiq_2f85_driver import driver as driver_types
+from robotiq_2f85_driver import pymodbus_driver
+from robotiq_2f85_driver.pymodbus_driver import PymodbusDriver
 
 # =============================================================================
 # 测试辅助类：仿真 Modbus 客户端
@@ -106,8 +80,17 @@ class _SequenceClient(_FakeClient):
         return _FakeResult(self.feedback_sequence[index])
 
 # =============================================================================
-# 测试用例（续）
+# 测试用例
 # =============================================================================
+
+
+def test_pack_speed_force_register_uses_robotiq_byte_order() -> None:
+    """验证 pack_speed_force_register() 按 Robotiq 字节序打包。
+
+    Robotiq 协议要求高字节为力控值，低字节为速度值。
+    输入 speed=0xC8, force=0x3C 应得到 0x3CC8。
+    """
+    assert driver_types.pack_speed_force_register(speed=0xC8, force=0x3C) == 0x3CC8
 
 
 def test_read_feedback_decodes_hardware_status(monkeypatch) -> None:
@@ -121,12 +104,12 @@ def test_read_feedback_decodes_hardware_status(monkeypatch) -> None:
     - current = 0x10 = 16 → 160 mA
     """
     fake_client = _FakeClient([0x3100, 0x0D14, 0x0910])
-    monkeypatch.setattr(driver_core, "ModbusSerialClient", lambda **kwargs: fake_client)
-    monkeypatch.setattr(driver_core, "FramerType", SimpleNamespace(RTU="rtu"))
+    monkeypatch.setattr(pymodbus_driver, "ModbusSerialClient", lambda **kwargs: fake_client)
+    monkeypatch.setattr(pymodbus_driver, "FramerType", SimpleNamespace(RTU="rtu"))
 
-    core = RobotiqDriverCore(dry_run=False)
-    core.connect()
-    feedback = core.read_feedback()
+    driver = PymodbusDriver()
+    driver.connect()
+    feedback = driver.read_feedback()
 
     assert feedback is not None
     assert feedback.is_activation_complete is True
@@ -135,15 +118,6 @@ def test_read_feedback_decodes_hardware_status(monkeypatch) -> None:
     assert feedback.position_request_echo == 0x14
     assert feedback.position == 0x09
     assert feedback.current_milliamps == 160
-
-
-def test_pack_speed_force_register_uses_robotiq_byte_order() -> None:
-    """验证 pack_speed_force_register() 按 Robotiq 字节序打包。
-
-    Robotiq 协议要求高字节为力控值，低字节为速度值。
-    输入 speed=0xC8, force=0x3C 应得到 0x3CC8。
-    """
-    assert driver_core.pack_speed_force_register(speed=0xC8, force=0x3C) == 0x3CC8
 
 
 def test_move_writes_expected_register_payload(monkeypatch) -> None:
@@ -168,12 +142,12 @@ def test_move_writes_expected_register_payload(monkeypatch) -> None:
             return _FakeResult([])
 
     fake_client = _CaptureClient()
-    monkeypatch.setattr(driver_core, "ModbusSerialClient", lambda **kwargs: fake_client)
-    monkeypatch.setattr(driver_core, "FramerType", SimpleNamespace(RTU="rtu"))
+    monkeypatch.setattr(pymodbus_driver, "ModbusSerialClient", lambda **kwargs: fake_client)
+    monkeypatch.setattr(pymodbus_driver, "FramerType", SimpleNamespace(RTU="rtu"))
 
-    core = RobotiqDriverCore(dry_run=False)
-    core.connect()
-    core.move(position=5, speed=10, force=20)
+    driver = PymodbusDriver()
+    driver.connect()
+    driver.move(position=5, speed=10, force=20)
 
     assert fake_client.calls[-1] == (0x03E8, [0x0900, 0x0005, 0x140A], 9)
 
@@ -186,13 +160,13 @@ def test_wait_for_motion_complete_reports_reached_goal(monkeypatch) -> None:
             [0xF100, 0x0005, 0x0500],
         ]
     )
-    monkeypatch.setattr(driver_core, "ModbusSerialClient", lambda **kwargs: fake_client)
-    monkeypatch.setattr(driver_core, "FramerType", SimpleNamespace(RTU="rtu"))
-    monkeypatch.setattr(driver_core.time, "sleep", lambda _: None)
+    monkeypatch.setattr(pymodbus_driver, "ModbusSerialClient", lambda **kwargs: fake_client)
+    monkeypatch.setattr(pymodbus_driver, "FramerType", SimpleNamespace(RTU="rtu"))
+    monkeypatch.setattr(pymodbus_driver.time, "sleep", lambda _: None)
 
-    core = RobotiqDriverCore(dry_run=False)
-    core.connect()
-    result = core.wait_for_motion_complete(target_position=5, timeout_s=0.2, position_tolerance=1)
+    driver = PymodbusDriver()
+    driver.connect()
+    result = driver.wait_for_motion_complete(target_position=5, timeout_s=0.2, position_tolerance=1)
 
     assert result.reached_goal is True
     assert result.stalled is False
@@ -207,13 +181,15 @@ def test_wait_for_motion_complete_reports_stall(monkeypatch) -> None:
             [0xB100, 0x000A, 0x0400],
         ]
     )
-    monkeypatch.setattr(driver_core, "ModbusSerialClient", lambda **kwargs: fake_client)
-    monkeypatch.setattr(driver_core, "FramerType", SimpleNamespace(RTU="rtu"))
-    monkeypatch.setattr(driver_core.time, "sleep", lambda _: None)
+    monkeypatch.setattr(pymodbus_driver, "ModbusSerialClient", lambda **kwargs: fake_client)
+    monkeypatch.setattr(pymodbus_driver, "FramerType", SimpleNamespace(RTU="rtu"))
+    monkeypatch.setattr(pymodbus_driver.time, "sleep", lambda _: None)
 
-    core = RobotiqDriverCore(dry_run=False)
-    core.connect()
-    result = core.wait_for_motion_complete(target_position=10, timeout_s=0.2, position_tolerance=1)
+    driver = PymodbusDriver()
+    driver.connect()
+    result = driver.wait_for_motion_complete(
+        target_position=10, timeout_s=0.2, position_tolerance=1
+    )
 
     assert result.reached_goal is False
     assert result.stalled is True
@@ -222,13 +198,13 @@ def test_wait_for_motion_complete_reports_stall(monkeypatch) -> None:
 def test_wait_for_motion_complete_times_out(monkeypatch) -> None:
     """Raise GripperError when motion feedback never settles before the timeout."""
     fake_client = _SequenceClient([[0x3900, 0x000A, 0x0400]])
-    monkeypatch.setattr(driver_core, "ModbusSerialClient", lambda **kwargs: fake_client)
-    monkeypatch.setattr(driver_core, "FramerType", SimpleNamespace(RTU="rtu"))
-    monkeypatch.setattr(driver_core.time, "sleep", lambda _: None)
+    monkeypatch.setattr(pymodbus_driver, "ModbusSerialClient", lambda **kwargs: fake_client)
+    monkeypatch.setattr(pymodbus_driver, "FramerType", SimpleNamespace(RTU="rtu"))
+    monkeypatch.setattr(pymodbus_driver.time, "sleep", lambda _: None)
     monotonic_values = iter([0.0, 0.01, 0.02, 0.03])
-    monkeypatch.setattr(driver_core.time, "monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr(pymodbus_driver.time, "monotonic", lambda: next(monotonic_values))
 
-    core = RobotiqDriverCore(dry_run=False)
-    core.connect()
-    with pytest.raises(driver_core.GripperError, match="Motion did not settle before timeout"):
-        core.wait_for_motion_complete(target_position=10, timeout_s=0.02, position_tolerance=1)
+    driver = PymodbusDriver()
+    driver.connect()
+    with pytest.raises(driver_types.GripperError, match="Motion did not settle before timeout"):
+        driver.wait_for_motion_complete(target_position=10, timeout_s=0.02, position_tolerance=1)

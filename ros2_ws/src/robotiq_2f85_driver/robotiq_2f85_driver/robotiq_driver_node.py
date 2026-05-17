@@ -27,7 +27,9 @@ from std_msgs.msg import Int32
 from std_srvs.srv import Trigger
 
 from .action_utils import map_action_position_to_command, map_effort_to_force_byte
-from .robotiq_driver_core import GripperError, MotionResult, RobotiqDriverCore
+from .driver import Driver, GripperError, MotionResult
+from .fake_driver import FakeDriver
+from .pymodbus_driver import PymodbusDriver
 from .safety import clamp_byte
 
 
@@ -94,7 +96,7 @@ class RobotiqDriverNode(LifecycleNode):
         self._declare_parameters()
 
         self.params: dict[str, Any] = {}
-        self.core: RobotiqDriverCore | None = None
+        self.core: Driver | None = None
 
         self.command_echo_pub = None
         self.status_pub = None
@@ -189,12 +191,21 @@ class RobotiqDriverNode(LifecycleNode):
         del state
         try:
             self.params = self._load_params()
-            self.core = RobotiqDriverCore(
-                port=str(self.params["serial_port"]),
-                baudrate=int(self.params["baudrate"]),
-                slave_address=int(self.params["slave_address"]),
-                dry_run=bool(self.params["dry_run"]),
-            )
+            driver_port = str(self.params["serial_port"])
+            driver_baudrate = int(self.params["baudrate"])
+            driver_slave_address = int(self.params["slave_address"])
+            if bool(self.params["dry_run"]):
+                self.core = FakeDriver(
+                    port=driver_port,
+                    baudrate=driver_baudrate,
+                    slave_address=driver_slave_address,
+                )
+            else:
+                self.core = PymodbusDriver(
+                    port=driver_port,
+                    baudrate=driver_baudrate,
+                    slave_address=driver_slave_address,
+                )
             self.command_echo_pub = self.create_lifecycle_publisher(
                 Int32, str(self.params["command_echo_topic"]), 10
             )

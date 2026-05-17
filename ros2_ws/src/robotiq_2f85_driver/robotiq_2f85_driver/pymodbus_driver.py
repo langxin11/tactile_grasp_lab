@@ -1,13 +1,30 @@
-"""Robotiq 2F-85 驱动核心，包含 dry-run 支持与运动完成检测。
+"""Robotiq 2F-85 真硬件驱动实现（pymodbus + RS-485）。
 
-封装 Modbus 通信、命令打包与反馈解析的核心逻辑。
+封装与夹爪的 Modbus RTU 通信：命令打包、寄存器写入、状态读取、
+激活流程、运动完成判定与故障处理。``dry_run`` 模拟反馈由
+:mod:`.fake_driver` 提供。
 """
 
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
 
+from .driver import (
+    ACTIVATION_TIMEOUT_SECONDS,
+    OBJECT_STATUS_AT_REQUESTED_POSITION,
+    OBJECT_STATUS_CLOSING_CONTACT,
+    OBJECT_STATUS_OPENING_CONTACT,
+    RESET_SETTLE_SECONDS,
+    SAFE_FORCE,
+    SAFE_SPEED,
+    STATUS_POLL_INTERVAL_SECONDS,
+    CommandRecord,
+    GripperError,
+    GripperFeedback,
+    MotionResult,
+    pack_position_register,
+    pack_speed_force_register,
+)
 from .safety import clamp_byte
 
 try:
@@ -18,221 +35,50 @@ except Exception:  # pragma: no cover - optional import at runtime
     FramerType = None
 
 
-SAFE_SPEED = 10
-SAFE_FORCE = 10
-RESET_SETTLE_SECONDS = 0.2
-ACTIVATION_TIMEOUT_SECONDS = 5.0
-STATUS_POLL_INTERVAL_SECONDS = 0.05
+class PymodbusDriver:
+    """通过 pymodbus 与真实 Robotiq 2F-85 夹爪通信的驱动实现。"""
 
-FAULT_STATUS_TEXT = {
-    0x00: "no fault",
-    0x05: "action delayed; activation must complete first",
-    0x07: "activation bit must be set before action",
-    0x08: "maximum operating temperature exceeded",
-    0x09: "no communication during at least 1 second",
-    0x0A: "under minimum operating voltage",
-    0x0B: "automatic release in progress",
-    0x0C: "internal fault",
-    0x0D: "activation fault; verify no interference occurred",
-    0x0E: "overcurrent triggered",
-    0x0F: "automatic release completed",
-}
-
-OBJECT_STATUS_MOVING = 0x00
-OBJECT_STATUS_OPENING_CONTACT = 0x01
-OBJECT_STATUS_CLOSING_CONTACT = 0x02
-OBJECT_STATUS_AT_REQUESTED_POSITION = 0x03
-
-
-def pack_position_register(position: int) -> int:
-    """将 Robotiq 目标位置字节打包为寄存器值。
-
-    Args:
-        position: 目标位置字节。
-
-    Returns:
-        int: 打包后的寄存器值。
-
-    Raises:
-        ValueError: 参数无法转换为有效字节时抛出。
-    """
-    return clamp_byte(position, "position")
-
-
-def pack_speed_force_register(speed: int, force: int) -> int:
-    """按 Robotiq 寄存器字节序打包速度和力度。
-
-    Args:
-        speed: 速度字节。
-        force: 力度字节。
-
-    Returns:
-        int: 打包后的寄存器值。
-
-    Raises:
-        ValueError: 参数无法转换为有效字节时抛出。
-    """
-    speed = clamp_byte(speed, "speed")
-    force = clamp_byte(force, "force")
-    return (force << 8) | speed
-
-
-class GripperError(RuntimeError):
-    """夹爪无法安全执行指令时抛出。"""
-
-
-@dataclass
-class CommandRecord:
-    """记录最近一次接受的指令。
-
-    Attributes:
-        position: 目标位置字节。
-        speed: 速度字节。
-        force: 力度字节。
-        simulated: 是否为模拟指令。
-    """
-
-    position: int
-    speed: int
-    force: int
-    simulated: bool
-
-
-@dataclass
-class GripperFeedback:
-    """Robotiq 夹爪反馈数据解析结果。
-
-    Attributes:
-        gripper_status: 状态字节。
-        fault_status: 故障字节。
-        position_request_echo: 位置回显字节。
-        position: 当前位置信息。
-        current: 电流原始值。
-    """
-
-    gripper_status: int
-    fault_status: int
-    position_request_echo: int
-    position: int
-    current: int
-
-    @property
-    def activation_state(self) -> int:
-        """返回夹爪激活状态位。"""
-        return (self.gripper_status >> 4) & 0x03
-
-    @property
-    def activation_echo(self) -> int:
-        """返回夹爪激活指令回显位。"""
-        return self.gripper_status & 0x01
-
-    @property
-    def go_to_echo(self) -> int:
-        """返回夹爪运动指令回显位。"""
-        return (self.gripper_status >> 3) & 0x01
-
-    @property
-    def object_status(self) -> int:
-        """返回夹爪对象状态位。"""
-        return (self.gripper_status >> 6) & 0x03
-
-    @property
-    def is_activation_complete(self) -> bool:
-        """返回夹爪激活是否完成。"""
-        return self.activation_echo == 1 and self.activation_state == 0x03
-
-    @property
-    def current_milliamps(self) -> int:
-        """返回夹爪当前电流（毫安）。"""
-        return 10 * self.current
-
-    @property
-    def fault_text(self) -> str:
-        """返回夹爪故障状态的文本描述。"""
-        return FAULT_STATUS_TEXT.get(self.fault_status, "unknown fault")
-
-
-@dataclass
-class MotionResult:
-    """等待运动完成的结果。
-
-    Attributes:
-        target_position: 目标位置字节。
-        final_feedback: 最终反馈。
-        reached_goal: 是否到达目标。
-        stalled: 是否因接触而停滞。
-    """
-
-    target_position: int
-    final_feedback: GripperFeedback
-    reached_goal: bool
-    stalled: bool
-
-
-class RobotiqDriverCore:
-    """Robotiq Modbus 接口封装。"""
+    dry_run: bool = False
 
     def __init__(
         self,
         port: str = "/dev/ttyUSB0",
         baudrate: int = 115200,
         slave_address: int = 9,
-        dry_run: bool = True,
     ) -> None:
-        """初始化驱动核心与可选的 Modbus 客户端。
+        """初始化 Modbus 串口客户端。
 
         Args:
             port: 串口设备路径。
             baudrate: 串口波特率。
             slave_address: Modbus 从站地址。
-            dry_run: 是否启用 dry-run 模式。
 
         Raises:
-            GripperError: 非 dry-run 且缺少 pymodbus 时抛出。
+            GripperError: 缺少 pymodbus 依赖时抛出。
         """
         self.port = port
         self.baudrate = baudrate
         self.slave_address = slave_address
-        self.dry_run = dry_run
         self.connected = False
         self.last_command: CommandRecord | None = None
         self.last_feedback: GripperFeedback | None = None
 
-        self.client = None
-        if not self.dry_run:
-            if ModbusSerialClient is None or FramerType is None:
-                raise GripperError(
-                    "pymodbus is not available in the Python interpreter used by this "
-                    "ROS 2 node; rebuild with the repo .venv, for example: "
-                    "'source .venv/bin/activate && ./scripts/build_ros2.sh "
-                    "--packages-select robotiq_2f85_driver'."
-                )
-            self.client = ModbusSerialClient(
-                port=port,
-                framer=FramerType.RTU,
-                baudrate=baudrate,
-                timeout=1,
-                stopbits=1,
-                bytesize=8,
-                parity="N",
+        if ModbusSerialClient is None or FramerType is None:
+            raise GripperError(
+                "pymodbus is not available in the Python interpreter used by this "
+                "ROS 2 node; rebuild with the repo .venv, for example: "
+                "'source .venv/bin/activate && ./scripts/build_ros2.sh "
+                "--packages-select robotiq_2f85_driver'."
             )
-
-    def synthetic_feedback(self) -> GripperFeedback:
-        """在 dry-run 模式下生成模拟反馈。
-
-        Returns:
-            GripperFeedback: 生成的反馈对象。
-        """
-        position = self.last_command.position if self.last_command is not None else 0
-        feedback = GripperFeedback(
-            gripper_status=0x31 | (OBJECT_STATUS_AT_REQUESTED_POSITION << 6),
-            fault_status=0x00,
-            position_request_echo=position,
-            position=position,
-            current=0,
+        self.client = ModbusSerialClient(
+            port=port,
+            framer=FramerType.RTU,
+            baudrate=baudrate,
+            timeout=1,
+            stopbits=1,
+            bytesize=8,
+            parity="N",
         )
-        self.last_feedback = feedback
-        return feedback
 
     def _write_registers(self, address: int, registers: list[int], action: str) -> None:
         """写入 Modbus 寄存器。
@@ -245,8 +91,6 @@ class RobotiqDriverCore:
         Raises:
             GripperError: 连接不可用或写入失败时抛出。
         """
-        if self.dry_run:
-            return
         if not self.connected or self.client is None:
             raise GripperError("Gripper is not connected; refusing to send commands.")
 
@@ -262,13 +106,11 @@ class RobotiqDriverCore:
         """读取当前夹爪反馈寄存器。
 
         Returns:
-            GripperFeedback | None: 反馈对象，dry-run 下返回模拟反馈。
+            GripperFeedback | None: 反馈对象。
 
         Raises:
             GripperError: 连接不可用或读取失败时抛出。
         """
-        if self.dry_run:
-            return self.synthetic_feedback()
         if not self.connected or self.client is None:
             raise GripperError("Gripper is not connected; refusing to read feedback.")
 
@@ -325,8 +167,8 @@ class RobotiqDriverCore:
         last_feedback: GripperFeedback | None = None
         while time.monotonic() < deadline:
             feedback = self.read_feedback()
-            if feedback is None:  # pragma: no cover - caller guarantees non-dry-run
-                raise GripperError("Activation feedback unavailable in dry-run mode.")
+            if feedback is None:  # pragma: no cover - hardware path always returns feedback
+                raise GripperError("Activation feedback unavailable.")
             last_feedback = feedback
             self._raise_for_fault(feedback, "activate")
             if feedback.is_activation_complete:
@@ -349,7 +191,7 @@ class RobotiqDriverCore:
             GripperError: 未完成激活或存在故障时抛出。
         """
         feedback = self.read_feedback()
-        if feedback is None:  # pragma: no cover - dry-run path already handled
+        if feedback is None:  # pragma: no cover - hardware path always returns feedback
             return
         self._raise_for_fault(feedback, "pre-motion")
         if not feedback.is_activation_complete:
@@ -365,10 +207,6 @@ class RobotiqDriverCore:
         Raises:
             GripperError: 连接失败或客户端未初始化时抛出。
         """
-        if self.dry_run:
-            self.connected = True
-            self.synthetic_feedback()
-            return
         if self.client is None:  # pragma: no cover - guarded by __init__
             raise GripperError("Modbus client is not initialized.")
         self.connected = bool(self.client.connect())
@@ -381,10 +219,6 @@ class RobotiqDriverCore:
         Raises:
             GripperError: 激活失败或通信异常时抛出。
         """
-        if self.dry_run:
-            self.connected = True
-            self.synthetic_feedback()
-            return
         self._write_registers(0x03E8, [0x0000, 0x0000, 0x0000], "reset gripper state")
         time.sleep(RESET_SETTLE_SECONDS)
         activation_speed_force = pack_speed_force_register(SAFE_SPEED, SAFE_FORCE)
@@ -414,12 +248,8 @@ class RobotiqDriverCore:
             position=position,
             speed=speed,
             force=force,
-            simulated=self.dry_run,
+            simulated=False,
         )
-
-        if self.dry_run:
-            self.synthetic_feedback()
-            return
 
         self.ensure_activated()
         speed_force = pack_speed_force_register(speed, force)
@@ -451,21 +281,13 @@ class RobotiqDriverCore:
         """
         target_position = clamp_byte(target_position, "target_position")
         position_tolerance = max(0, int(position_tolerance))
-        if self.dry_run:
-            feedback = self.synthetic_feedback()
-            return MotionResult(
-                target_position=target_position,
-                final_feedback=feedback,
-                reached_goal=True,
-                stalled=False,
-            )
 
         deadline = time.monotonic() + float(timeout_s)
         last_feedback: GripperFeedback | None = None
         while time.monotonic() < deadline:
             feedback = self.read_feedback()
-            if feedback is None:  # pragma: no cover - non-dry-run callers only
-                raise GripperError("Motion feedback unavailable in dry-run mode.")
+            if feedback is None:  # pragma: no cover - hardware path always returns feedback
+                raise GripperError("Motion feedback unavailable.")
             last_feedback = feedback
             self._raise_for_fault(feedback, "motion")
 
@@ -518,9 +340,6 @@ class RobotiqDriverCore:
         Raises:
             GripperError: 停止命令发送失败时抛出。
         """
-        if self.dry_run:
-            self.synthetic_feedback()
-            return
         if not self.connected:
             return
         self._write_registers(0x03E8, [0x0100, 0x0000, 0x0000], "stop gripper motion")
