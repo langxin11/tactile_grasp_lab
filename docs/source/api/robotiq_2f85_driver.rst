@@ -3,10 +3,6 @@ robotiq_2f85_driver
 
 Robotiq 2F-85 夹爪的 Python 驱动核心、ROS2 节点封装与安全工具。
 
-.. contents::
-   :local:
-   :depth: 1
-
 驱动接口契约
 ------------
 

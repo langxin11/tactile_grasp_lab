@@ -3,10 +3,6 @@ tactile_grasp_controller
 
 订阅触觉数据、运行规则型状态机、向夹爪 action 发命令的控制层。
 
-.. contents::
-   :local:
-   :depth: 1
-
 模型与动作
 ----------
 
