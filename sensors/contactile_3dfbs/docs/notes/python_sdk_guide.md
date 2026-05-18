@@ -1,7 +1,7 @@
 # Python SDK (Linux) 使用指南
 
-**文档**: `docs/manuals/3DFBSPython_B1.0_MAN_FEB25.pdf`  
-**SDK 位置**: `/home/xiaodalaing/contactile/SOFTWARE/PythonLIN/`  
+**文档**: `docs/manuals/3DFBSPython_B1.0_MAN_FEB25.pdf`
+**SDK 位置**: `/home/xiaodalaing/contactile/SOFTWARE/PythonLIN/`
 **版本**: Beta v1.0 (FEB25)
 
 ## SDK 文件

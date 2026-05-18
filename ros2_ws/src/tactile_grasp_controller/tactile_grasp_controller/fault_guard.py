@@ -28,7 +28,6 @@ def update_consecutive_limit_counter(
         - next_count: 更新后的连续超限计数。
         - tripped: 是否达到触发阈值。
     """
-
     if required_count <= 1:
         return (1 if value > limit else 0), value > limit
 

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Contactile 3DFBS lab CLI — 统一的传感器采集、记录、实时预览和回放工具。
+"""Contactile 3DFBS lab CLI — 统一的传感器采集、记录、实时预览和回放工具。
 
 用法:
     # 快速读取（单传感器，含 software baseline）
@@ -27,14 +26,14 @@ import csv
 import math
 import os
 import statistics
-import sys
 import threading
 import time
 from collections import deque
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Iterable, Iterator, Optional
+from typing import Annotated
 
 import FBS3D_CXX_Pybind as fbs
 import typer
@@ -242,7 +241,7 @@ class SensorSession:
         software_baseline: bool = True,
         baseline_duration_sec: float = DEFAULT_BASELINE_DURATION_SEC,
         baseline_std_limit_n: float = DEFAULT_BASELINE_STD_LIMIT_N,
-        baseline_sensor_indices: Optional[list[int]] = None,
+        baseline_sensor_indices: list[int] | None = None,
     ) -> None:
         if not 0 <= sensor_index < MAX_SENSOR_SLOTS:
             raise ValueError(f"传感器索引必须在 0..{MAX_SENSOR_SLOTS - 1} 之间")
@@ -257,9 +256,9 @@ class SensorSession:
         for baseline_sensor_index in self.baseline_sensor_indices:
             if not 0 <= baseline_sensor_index < MAX_SENSOR_SLOTS:
                 raise ValueError(f"传感器索引必须在 0..{MAX_SENSOR_SLOTS - 1} 之间")
-        self.listener: Optional[fbs.PTSDKListener] = None
+        self.listener: fbs.PTSDKListener | None = None
         self.sensors: list[fbs.PTSDKSensor] = []
-        self._last_timestamp_us: Optional[int] = None
+        self._last_timestamp_us: int | None = None
         self._force_offsets: dict[int, ForceOffset] = {}
 
     def __enter__(self) -> "SensorSession":
@@ -333,7 +332,7 @@ class SensorSession:
     def _should_accept_timestamp(
         self,
         timestamp_us: int,
-        last_timestamp_us: Optional[int],
+        last_timestamp_us: int | None,
     ) -> bool:
         """按目标输出频率筛选 timestamp，避免 SDK 后台线程过快更新数据。"""
         if timestamp_us == 0:
@@ -464,7 +463,7 @@ class SensorSession:
 
 
 @contextmanager
-def csv_writer(path: Optional[str]) -> Iterator[Optional[csv.DictWriter]]:
+def csv_writer(path: str | None) -> Iterator[csv.DictWriter | None]:
     """CSV 文件写入上下文管理器。
 
     自动创建父目录并写入表头。
@@ -516,9 +515,9 @@ def _print_sample(index: int, sample: Sample) -> None:
 def _collect_samples(
     session: SensorSession,
     *,
-    count: Optional[int] = None,
-    duration: Optional[float] = None,
-    writer: Optional[csv.DictWriter] = None,
+    count: int | None = None,
+    duration: float | None = None,
+    writer: csv.DictWriter | None = None,
     echo: bool = False,
 ) -> list[Sample]:
     """循环采集传感器样本。
@@ -624,7 +623,7 @@ class LiveState:
         self.samples: deque[MultiSample] = deque(maxlen=max_samples)
         self.lock = threading.Lock()
         self.stop = threading.Event()
-        self.error: Optional[BaseException] = None
+        self.error: BaseException | None = None
         self.count = 0
 
     def append(self, sample: MultiSample) -> None:
@@ -641,7 +640,7 @@ def _acquisition_worker(
     port: str,
     rate: int,
     sensors: list[int],
-    output: Optional[str],
+    output: str | None,
     software_baseline: bool,
     baseline_duration_sec: float,
     baseline_std_limit_n: float,
@@ -869,7 +868,7 @@ def live(
         ),
     ] = DEFAULT_SENSOR,
     sensors_arg: Annotated[
-        Optional[str],
+        str | None,
         typer.Option("--sensors", "-s", help="同屏显示多个传感器，例如 0,1"),
     ] = None,
     confirm_no_load: Annotated[
@@ -919,7 +918,7 @@ def live(
         typer.Option("--font-size", help="界面字体大小", min=12, max=36),
     ] = DPG_FONT_SIZE,
     output: Annotated[
-        Optional[str],
+        str | None,
         typer.Option("--output", "-o", help="可选 CSV 输出路径"),
     ] = None,
 ) -> None:
@@ -1245,7 +1244,7 @@ def check(
 # ── 入口 ──────────────────────────────────────────────────────────
 
 
-def main(argv: Optional[Iterable[str]] = None) -> int:
+def main(argv: Iterable[str] | None = None) -> int:
     """CLI 入口，返回 POSIX 退出码。"""
     try:
         if argv is None:

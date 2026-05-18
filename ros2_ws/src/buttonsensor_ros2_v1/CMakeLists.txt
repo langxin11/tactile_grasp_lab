@@ -40,7 +40,7 @@ target_link_libraries(buttonsensor_ros2_node
 
 ament_target_dependencies(buttonsensor_ros2_node rclcpp std_msgs sensor_interfaces)
 
-install(TARGETS 
+install(TARGETS
   buttonsensor_ros2_node
   DESTINATION lib/${PROJECT_NAME})
 

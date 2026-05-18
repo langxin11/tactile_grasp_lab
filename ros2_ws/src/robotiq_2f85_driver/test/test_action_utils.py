@@ -1,7 +1,6 @@
 """Unit tests for action-space to Robotiq-byte mapping helpers."""
 
 import pytest
-
 from robotiq_2f85_driver.action_utils import (
     map_action_position_to_command,
     map_effort_to_force_byte,

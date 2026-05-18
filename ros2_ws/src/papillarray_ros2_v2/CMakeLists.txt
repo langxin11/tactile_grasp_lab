@@ -32,7 +32,7 @@ target_link_libraries(papillarray_ros2_node
 )
 ament_target_dependencies(papillarray_ros2_node rclcpp std_msgs sensor_interfaces)
 
-install(TARGETS 
+install(TARGETS
   papillarray_ros2_node
   DESTINATION lib/${PROJECT_NAME})
 

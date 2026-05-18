@@ -1,6 +1,6 @@
 # ROS2 集成使用指南
 
-**文档**: `docs/manuals/3DFBSROS2_B1.0_MAN_DEC24.pdf`  
+**文档**: `docs/manuals/3DFBSROS2_B1.0_MAN_DEC24.pdf`
 **版本**: Beta v1.0 (DEC24)
 
 ## 概述

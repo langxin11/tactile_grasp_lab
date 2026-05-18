@@ -149,7 +149,7 @@ class PtsSession:
         self.sensors = [PTSDK_CXX_Pybind.PTSDKSensor() for _ in range(PTS_MAX_SENSORS)]
         self._last_timestamp_us: int | None = None
 
-    def __enter__(self) -> "PtsSession":
+    def __enter__(self) -> PtsSession:
         if not os.path.exists(self.port):
             raise FileNotFoundError(f"串口设备不存在: {self.port}")
 

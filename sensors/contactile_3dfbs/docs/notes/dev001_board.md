@@ -1,6 +1,6 @@
 # DEV001 传感器开发板 — 摘要
 
-**文档**: `docs/manuals/DEV001_Datasheet_Rev1.1.pdf`  
+**文档**: `docs/manuals/DEV001_Datasheet_Rev1.1.pdf`
 **来源**: Contactile Pty Ltd
 
 ## 概述
@@ -50,9 +50,9 @@ DEV001 是基于 ESP32-S2-SOLO 的五端口传感器集线器，用于与 Contac
 
 ### stream 命令参数
 
-**action**: `start` / `stop`  
-**data flags**: `force`, `all`, `fx`, `fy`, `fz`, `temp`（逗号分隔，无空格）  
-**frequency**: 25–1000 Hz  
+**action**: `start` / `stop`
+**data flags**: `force`, `all`, `fx`, `fy`, `fz`, `temp`（逗号分隔，无空格）
+**frequency**: 25–1000 Hz
 **print format**: `binary` / `ascii` / `none`
 
 示例:

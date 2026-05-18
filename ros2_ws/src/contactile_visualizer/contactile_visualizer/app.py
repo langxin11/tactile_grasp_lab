@@ -17,9 +17,9 @@ from typing import Annotated, Literal
 
 # ===== ROS2 导入 =====
 import rclpy
+import typer
 from rclpy.node import Node
 from sensor_interfaces.msg import PillarState, SensorState
-import typer
 
 # ===== Qt / pyqtgraph 导入（含安装提示） =====
 try:
@@ -195,6 +195,7 @@ class DataHistory:
             vals_z.append(values[2])
 
         return xs, vals_x, vals_y, vals_z
+
 
 # ===== ROS2 订阅节点 =====
 

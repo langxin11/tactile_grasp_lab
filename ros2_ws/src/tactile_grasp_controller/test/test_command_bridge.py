@@ -70,9 +70,7 @@ def test_maps_command_position_to_action_position() -> None:
     """Verify open, closed, and midpoint mapping."""
     assert map_command_to_action_position(0, 0, 255, 0.0, 0.8) == pytest.approx(0.0)
     assert map_command_to_action_position(255, 0, 255, 0.0, 0.8) == pytest.approx(0.8)
-    assert map_command_to_action_position(127, 0, 255, 0.0, 0.8) == pytest.approx(
-        127 / 255 * 0.8
-    )
+    assert map_command_to_action_position(127, 0, 255, 0.0, 0.8) == pytest.approx(127 / 255 * 0.8)
 
 
 def test_open_sends_open_goal() -> None:
@@ -127,5 +125,8 @@ def test_action_server_unavailable_is_diagnostic() -> None:
     )
 
     assert not bridge.close_step(1)
-    assert bridge.last_error == "gripper action server unavailable: /robotiq_gripper_controller/gripper_cmd"
+    assert (
+        bridge.last_error
+        == "gripper action server unavailable: /robotiq_gripper_controller/gripper_cmd"
+    )
     assert node.logger.errors == [bridge.last_error]

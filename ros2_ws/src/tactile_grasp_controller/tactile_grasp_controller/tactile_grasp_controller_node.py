@@ -308,7 +308,9 @@ class TactileGraspControllerNode(Node):
             if not command_ok:
                 detail = self.command_bridge.last_error or "gripper command failed"
                 self.state_machine.enter_fault(detail)
-                self.publish_json(self.state_pub, {"state": self.state_machine.state, "detail": detail})
+                self.publish_json(
+                    self.state_pub, {"state": self.state_machine.state, "detail": detail}
+                )
                 return
             self.publish_json(
                 self.state_pub, {"state": self.state_machine.state, "detail": action.reason}

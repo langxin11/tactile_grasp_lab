@@ -10,7 +10,7 @@ package_name = "robotiq_2f85_driver"
 setup(
     name=package_name,
     version="0.1.0",
-    packages=find_packages(exclude=["test"]),    # 排除测试目录
+    packages=find_packages(exclude=["test"]),  # 排除测试目录
     data_files=[
         # 资源索引（供 ament 工具发现）
         ("share/ament_index/resource_index/packages", ["resource/" + package_name]),

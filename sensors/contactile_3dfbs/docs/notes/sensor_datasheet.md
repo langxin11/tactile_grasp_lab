@@ -1,6 +1,6 @@
 # 3DFBSxx 三维力按钮传感器 — 数据手册摘要
 
-**文档**: `docs/manuals/3DFBS_Datasheet_Rev_7.pdf`  
+**文档**: `docs/manuals/3DFBS_Datasheet_Rev_7.pdf`
 **来源**: Contactile Pty Ltd
 
 ## 概述

@@ -4,9 +4,9 @@
 """
 
 from launch import LaunchDescription
-from launch_ros.actions import Node
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
 
 
 def generate_launch_description():
@@ -15,7 +15,9 @@ def generate_launch_description():
     将所有参数传递给节点，输出到 screen 方便调试。
     """
     # ---- 声明启动参数 ----
-    hub_id_arg = DeclareLaunchArgument("hub_id", default_value="0", description="集线器 Hub 的 ID（默认 0）")
+    hub_id_arg = DeclareLaunchArgument(
+        "hub_id", default_value="0", description="集线器 Hub 的 ID（默认 0）"
+    )
     n_sensors_arg = DeclareLaunchArgument(
         "n_sensors",
         default_value="10",
@@ -54,7 +56,7 @@ def generate_launch_description():
                 executable="buttonsensor_ros2_node",
                 name="buttonsensor_ros2_node",
                 output="screen",  # 输出到终端，方便调试
-                parameters=[      # 将 launch 参数映射到 ROS 节点参数
+                parameters=[  # 将 launch 参数映射到 ROS 节点参数
                     {"hub_id": LaunchConfiguration("hub_id")},
                     {"n_sensors": LaunchConfiguration("n_sensors")},
                     {"com_port": LaunchConfiguration("com_port")},

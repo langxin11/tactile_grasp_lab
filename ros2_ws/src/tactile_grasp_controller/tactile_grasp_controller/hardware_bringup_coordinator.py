@@ -212,7 +212,6 @@ class HardwareBringupCoordinator(Node):
 
     def send_gripper_open(self) -> bool:
         """Send an opening GripperCommand goal through the new execution layer."""
-
         if not self.gripper_action_client.wait_for_server(
             timeout_sec=float(self.params["wait_for_action_server_s"])
         ):

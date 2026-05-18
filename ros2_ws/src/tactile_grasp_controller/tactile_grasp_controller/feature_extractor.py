@@ -59,7 +59,6 @@ def extract_tactile_features(
     Returns:
         包含所有提取特征的字典。
     """
-
     left_pillars = _pillars(left_msg)
     right_pillars = _pillars(right_msg)
 

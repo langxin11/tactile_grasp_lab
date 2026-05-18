@@ -94,4 +94,6 @@ def generate_launch_description() -> LaunchDescription:
         launch_arguments={"config": LaunchConfiguration("controller_config")}.items(),
     )
 
-    return LaunchDescription(declare_args + [sensor_stack, gripper_execution_stack, controller_stack])
+    return LaunchDescription(
+        declare_args + [sensor_stack, gripper_execution_stack, controller_stack]
+    )

@@ -1,6 +1,6 @@
 # C++ SDK (Linux) 使用指南
 
-**文档**: `docs/manuals/3DFBSC++LIN_B1.0_MAN_DEC24.pdf`  
+**文档**: `docs/manuals/3DFBSC++LIN_B1.0_MAN_DEC24.pdf`
 **版本**: Beta v1.0 (DEC24)
 
 ## SDK 文件结构

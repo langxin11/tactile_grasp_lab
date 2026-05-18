@@ -9,4 +9,4 @@
 // 这里提供 typedef，使 'byte' 成为合法标识符
 typedef unsigned char byte;
 
-#endif // PTSDK_COMPAT_H
+#endif  // PTSDK_COMPAT_H

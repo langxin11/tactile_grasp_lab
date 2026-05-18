@@ -83,7 +83,9 @@ class CommandBridge:
         factory = action_client_factory or ActionClient
         if factory is None and not self.dry_run:
             raise RuntimeError("rclpy.action.ActionClient is unavailable")
-        self.action_client = None if self.dry_run else factory(node, GripperCommand, self.action_name)
+        self.action_client = (
+            None if self.dry_run else factory(node, GripperCommand, self.action_name)
+        )
 
     def sync_echo(self, position: int) -> None:
         """Update the command estimate from the legacy driver echo.

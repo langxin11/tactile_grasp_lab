@@ -1,6 +1,5 @@
 #!/usr/bin/env python
-"""
-Contactile 3DFBS 最小读取器 (Python)
+"""Contactile 3DFBS 最小读取器 (Python)
 
 用法:
     python quick_read.py

@@ -79,6 +79,7 @@ class _SequenceClient(_FakeClient):
         self.calls += 1
         return _FakeResult(self.feedback_sequence[index])
 
+
 # =============================================================================
 # 测试用例
 # =============================================================================
@@ -128,6 +129,7 @@ def test_move_writes_expected_register_payload(monkeypatch) -> None:
     - 寄存器值为 [0x0900, 0x0005, 0x140A]（位置=5, 速度=10, 力控=20）
     - 设备 ID 为 9
     """
+
     class _CaptureClient(_FakeClient):
         """带调用记录功能的仿真客户端。"""
 

@@ -1,6 +1,6 @@
 # VIS 可视化软件 — 摘要
 
-**文档**: `docs/manuals/3DFBSVIS_B3.0_MAN_DEC24.pdf`  
+**文档**: `docs/manuals/3DFBSVIS_B3.0_MAN_DEC24.pdf`
 **版本**: Beta v3.0 (DEC24)
 
 ## 概述
