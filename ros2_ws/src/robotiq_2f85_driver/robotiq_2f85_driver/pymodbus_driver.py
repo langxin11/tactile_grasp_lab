@@ -125,13 +125,13 @@ class PymodbusDriver:
         if len(result.registers) < 3:  # pragma: no cover - defensive check
             raise GripperError("read feedback returned too few registers.")
 
-        status_register, fault_register, position_register = result.registers[:3]
+        status_register, position_register, current_register = result.registers[:3]
         feedback = GripperFeedback(
             gripper_status=(status_register >> 8) & 0xFF,
-            fault_status=(fault_register >> 8) & 0xFF,
-            position_request_echo=fault_register & 0xFF,
-            position=(position_register >> 8) & 0xFF,
-            current=position_register & 0xFF,
+            fault_status=status_register & 0xFF,
+            position_request_echo=(position_register >> 8) & 0xFF,
+            position=position_register & 0xFF,
+            current=(current_register >> 8) & 0xFF,
         )
         self.last_feedback = feedback
         return feedback

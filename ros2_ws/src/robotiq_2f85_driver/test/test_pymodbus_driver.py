@@ -97,14 +97,14 @@ def test_pack_speed_force_register_uses_robotiq_byte_order() -> None:
 def test_read_feedback_decodes_hardware_status(monkeypatch) -> None:
     """验证 read_feedback() 能正确解码硬件状态寄存器。
 
-    使用预设的寄存器值 [0x3100, 0x0D14, 0x0910] 测试解码逻辑：
+    使用预设的寄存器值 [0x310D, 0x1409, 0x1000] 测试解码逻辑：
     - gripper_status = 0x31 → activation 完成
     - fault_status = 0x0D → 激活故障
     - position_request_echo = 0x14
     - position = 0x09
     - current = 0x10 = 16 → 160 mA
     """
-    fake_client = _FakeClient([0x3100, 0x0D14, 0x0910])
+    fake_client = _FakeClient([0x310D, 0x1409, 0x1000])
     monkeypatch.setattr(pymodbus_driver, "ModbusSerialClient", lambda **kwargs: fake_client)
     monkeypatch.setattr(pymodbus_driver, "FramerType", SimpleNamespace(RTU="rtu"))
 
@@ -158,8 +158,8 @@ def test_wait_for_motion_complete_reports_reached_goal(monkeypatch) -> None:
     """Return reached_goal when the hardware position settles near the target."""
     fake_client = _SequenceClient(
         [
-            [0x3900, 0x0005, 0x0100],
-            [0xF100, 0x0005, 0x0500],
+            [0x3900, 0x0501, 0x0100],
+            [0xF100, 0x0505, 0x0500],
         ]
     )
     monkeypatch.setattr(pymodbus_driver, "ModbusSerialClient", lambda **kwargs: fake_client)
@@ -179,8 +179,8 @@ def test_wait_for_motion_complete_reports_stall(monkeypatch) -> None:
     """Return stalled when the gripper stops on object contact before the target."""
     fake_client = _SequenceClient(
         [
-            [0x3900, 0x000A, 0x0400],
-            [0xB100, 0x000A, 0x0400],
+            [0x3900, 0x0A04, 0x0400],
+            [0xB100, 0x0A04, 0x0400],
         ]
     )
     monkeypatch.setattr(pymodbus_driver, "ModbusSerialClient", lambda **kwargs: fake_client)
@@ -199,7 +199,7 @@ def test_wait_for_motion_complete_reports_stall(monkeypatch) -> None:
 
 def test_wait_for_motion_complete_times_out(monkeypatch) -> None:
     """Raise GripperError when motion feedback never settles before the timeout."""
-    fake_client = _SequenceClient([[0x3900, 0x000A, 0x0400]])
+    fake_client = _SequenceClient([[0x3900, 0x0A04, 0x0400]])
     monkeypatch.setattr(pymodbus_driver, "ModbusSerialClient", lambda **kwargs: fake_client)
     monkeypatch.setattr(pymodbus_driver, "FramerType", SimpleNamespace(RTU="rtu"))
     monkeypatch.setattr(pymodbus_driver.time, "sleep", lambda _: None)

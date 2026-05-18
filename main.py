@@ -7,11 +7,13 @@
 """
 
 import contextlib
+import os
 import select
 import sys
 import termios
 import time
 import tty
+from dataclasses import dataclass
 
 from pymodbus.client import ModbusSerialClient
 from pymodbus.framer import FramerType
@@ -22,7 +24,11 @@ MIN_VALUE = 0
 MAX_VALUE = 255
 KEY_STEP_COARSE = 25
 KEY_STEP_FINE = 5
-ESC_SEQUENCE_TIMEOUT = 0.05
+ESC_SEQUENCE_TIMEOUT = 0.2
+KEYBOARD_POLL_INTERVAL_SECONDS = 0.02
+KEEPALIVE_INTERVAL_SECONDS = 0.3
+STATUS_POLL_INTERVAL_SECONDS = 0.05
+ACTIVATION_TIMEOUT_SECONDS = 5.0
 
 
 def pack_position_register(position):
@@ -56,6 +62,47 @@ def pack_speed_force_register(speed, force):
 
 class GripperError(RuntimeError):
     """夹爪无法安全完成请求时抛出的异常。"""
+
+
+@dataclass
+class GripperFeedback:
+    """Robotiq 输入寄存器反馈解析结果。"""
+
+    gripper_status: int
+    fault_status: int
+    position_request_echo: int
+    position: int
+    current: int
+
+    @property
+    def activation_state(self):
+        """返回 gSTA 激活状态位。"""
+        return (self.gripper_status >> 4) & 0x03
+
+    @property
+    def activation_echo(self):
+        """返回 gACT 激活回显位。"""
+        return self.gripper_status & 0x01
+
+    @property
+    def is_activation_complete(self):
+        """返回是否处于激活完成状态。"""
+        return self.activation_echo == 1 and self.activation_state == 0x03
+
+
+def decode_feedback_registers(registers):
+    """将 Robotiq 反馈寄存器解码为结构化状态。"""
+    if len(registers) < 3:
+        raise ValueError("反馈寄存器数量不足，至少需要 3 个寄存器")
+
+    status_register, position_register, current_register = registers[:3]
+    return GripperFeedback(
+        gripper_status=(status_register >> 8) & 0xFF,
+        fault_status=status_register & 0xFF,
+        position_request_echo=(position_register >> 8) & 0xFF,
+        position=position_register & 0xFF,
+        current=(current_register >> 8) & 0xFF,
+    )
 
 
 def clamp_byte(value, name):
@@ -106,34 +153,47 @@ def raw_terminal():
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
 
-def _read_escape_sequence():
-    r"""读取 ESC 之后的 ANSI 转义序列并归一化为按键名称。
+def _read_raw_byte(timeout_seconds=None):
+    """直接从文件描述符读 1 字节，绕过 Python 的 BufferedReader。
 
-    由 :func:`read_key` 在收到 ``\x1b`` 之后调用。使用短超时区分单击 Esc
-    与方向键序列，并兼容 ``ESC[1~`` / ``ESC[4~`` 等 Home/End 变体。
+    Args:
+        timeout_seconds: select 超时秒数；None 表示阻塞等待。
 
     Returns:
-        str: 归一化的按键名,如 ``"UP" "DOWN" "LEFT" "RIGHT" "HOME" "END"``;
-        无后续字符返回 ``"ESC"``;无法识别的序列返回 ``"UNKNOWN"``。
+        bytes: 读到的单字节；超时则返回 b""。
     """
-    if not select.select([sys.stdin], [], [], ESC_SEQUENCE_TIMEOUT)[0]:
+    fd = sys.stdin.fileno()
+    if timeout_seconds is not None:
+        ready = select.select([fd], [], [], timeout_seconds)[0]
+        if not ready:
+            return b""
+    return os.read(fd, 1)
+
+
+def _read_escape_sequence():
+    r"""读取 ESC 之后的 ANSI 转义序列并归一化为按键名称。"""
+    data = _read_raw_byte(timeout_seconds=ESC_SEQUENCE_TIMEOUT)
+    if not data:
         return "ESC"
 
-    second = sys.stdin.read(1)
-    if second != "[":
-        return "ESC"
+    sequence = b""
+    while True:
+        sequence += data
+        last = chr(sequence[-1])
+        if len(sequence) > 1 and (last.isalpha() or last == "~"):
+            break
+        data = _read_raw_byte(timeout_seconds=ESC_SEQUENCE_TIMEOUT)
+        if not data:
+            break
 
-    third = sys.stdin.read(1)
+    seq = sequence.decode("ascii", errors="replace")
     arrow_map = {"A": "UP", "B": "DOWN", "C": "RIGHT", "D": "LEFT", "H": "HOME", "F": "END"}
-    if third in arrow_map:
-        return arrow_map[third]
-
-    # 处理 ESC[1~ / ESC[4~ 这类带波浪号的序列（部分终端的 Home/End）
-    if third.isdigit():
-        tail = sys.stdin.read(1)
-        if third == "1" and tail == "~":
+    if seq.startswith(("[", "O")):
+        if seq[-1] in arrow_map:
+            return arrow_map[seq[-1]]
+        if seq in ("[1~", "[7~", "OH"):
             return "HOME"
-        if third == "4" and tail == "~":
+        if seq in ("[4~", "[8~", "OF"):
             return "END"
     return "UNKNOWN"
 
@@ -147,10 +207,27 @@ def read_key():
         str: 普通可打印字符按原样返回;方向键 / Home / End 返回归一化名称
         （见 :func:`_read_escape_sequence`）;单击 Esc 返回 ``"ESC"``。
     """
-    ch = sys.stdin.read(1)
-    if ch == "\x1b":
+    ch = _read_raw_byte()
+    if ch == b"\x1b":
         return _read_escape_sequence()
-    return ch
+    return ch.decode("ascii", errors="replace")
+
+
+def wait_for_key(timeout_seconds):
+    """在给定超时时间内等待一次按键，超时返回 ``None``。
+
+    Args:
+        timeout_seconds: 最长等待时间（秒）。
+
+    Returns:
+        str | None: 读取到按键时返回按键；超时则返回 ``None``。
+    """
+    ch = _read_raw_byte(timeout_seconds=timeout_seconds)
+    if not ch:
+        return None
+    if ch == b"\x1b":
+        return _read_escape_sequence()
+    return ch.decode("ascii", errors="replace")
 
 
 class Robotiq2F85:
@@ -222,6 +299,61 @@ class Robotiq2F85:
             raise GripperError("连接失败，请检查端口、权限和夹爪供电。")
         print("成功连接到夹爪串口！")
 
+    def read_feedback(self):
+        """读取一次夹爪状态反馈。"""
+        if not self.connected:
+            raise GripperError("夹爪未连接，拒绝读取状态反馈。")
+
+        try:
+            result = self.client.read_input_registers(0x07D0, count=3, device_id=self.slave_address)
+        except Exception as exc:
+            raise GripperError(f"读取状态反馈失败：串口读异常：{exc}") from exc
+
+        if result.isError():
+            raise GripperError(f"读取状态反馈失败：Modbus 返回错误：{result}")
+
+        return decode_feedback_registers(result.registers)
+
+    def _raise_for_fault(self, feedback, action):
+        """检测故障码并抛出可诊断异常。"""
+        if feedback.fault_status == 0x00:
+            return
+        raise GripperError(
+            f"{action} 失败：fault=0x{feedback.fault_status:02X}, "
+            f"status=0x{feedback.gripper_status:02X}, position={feedback.position}"
+        )
+
+    def _wait_for_activation_complete(self):
+        """轮询等待激活完成。"""
+        deadline = time.monotonic() + ACTIVATION_TIMEOUT_SECONDS
+        last_feedback = None
+        while time.monotonic() < deadline:
+            feedback = self.read_feedback()
+            last_feedback = feedback
+            self._raise_for_fault(feedback, "激活夹爪")
+            if feedback.is_activation_complete:
+                return
+            time.sleep(STATUS_POLL_INTERVAL_SECONDS)
+
+        if last_feedback is None:
+            raise GripperError("激活超时：未读取到任何反馈。")
+        raise GripperError(
+            "激活超时："
+            f"status=0x{last_feedback.gripper_status:02X}, "
+            f"fault=0x{last_feedback.fault_status:02X}"
+        )
+
+    def ensure_activated(self):
+        """确认夹爪仍处于激活完成状态。"""
+        feedback = self.read_feedback()
+        self._raise_for_fault(feedback, "激活状态检查")
+        if not feedback.is_activation_complete:
+            raise GripperError(
+                "夹爪未处于激活完成状态："
+                f"status=0x{feedback.gripper_status:02X}, "
+                f"fault=0x{feedback.fault_status:02X}"
+            )
+
     def activate(self):
         """激活夹爪，上电后必须调用一次。
 
@@ -237,12 +369,18 @@ class Robotiq2F85:
         time.sleep(1)
 
         print("正在激活夹爪...")
-        # 写入激活指令 (rACT=1, rGTO=1, rATR=0, rPRQ=0)
-        # 同时带上安全速度和力度，避免初始化校准过快或过猛
+        # 写入激活指令 (rACT=1, rGTO=0)。
+        # 激活完成后，发送运动指令时再置 rGTO=1。
+        # 同时带上安全速度和力度，避免初始化校准过快或过猛。
         activation_speed_force = pack_speed_force_register(SAFE_SPEED, SAFE_FORCE)
         # 寄存器 0x03E8: 动作请求
         self._write_registers(0x03E8, [0x0100, 0x0000, activation_speed_force], "激活夹爪")
-        time.sleep(2)  # 等待夹爪完成初始化校准动作
+        self._wait_for_activation_complete()
+        print("夹爪激活完成。")
+
+    def keepalive(self):
+        """在空闲等待期间轮询一次状态，避免硬件因长时间无通信进入故障。"""
+        self.ensure_activated()
 
     def move(self, position, speed=SAFE_SPEED, force=SAFE_FORCE):
         """下发一次位置/速度/力度运动指令。
@@ -331,12 +469,22 @@ if __name__ == "__main__":
             "Home 全开  End 全闭  Space 停止  q 退出"
         )
         current_position = 0
-        gripper.move(current_position)
+        next_keepalive_deadline = time.monotonic() + KEEPALIVE_INTERVAL_SECONDS
 
         with raw_terminal():
             while True:
-                key = read_key()
-                if key in ("q", "Q", "ESC"):
+                now = time.monotonic()
+                timeout_seconds = min(
+                    KEYBOARD_POLL_INTERVAL_SECONDS,
+                    max(0.0, next_keepalive_deadline - now),
+                )
+                key = wait_for_key(timeout_seconds)
+                if key is None:
+                    if time.monotonic() >= next_keepalive_deadline:
+                        gripper.keepalive()
+                        next_keepalive_deadline = time.monotonic() + KEEPALIVE_INTERVAL_SECONDS
+                    continue
+                if key in ("q", "Q"):
                     print("退出键盘控制。")
                     break
                 if key == "UP":
@@ -353,10 +501,12 @@ if __name__ == "__main__":
                     current_position = MAX_VALUE
                 elif key == " ":
                     gripper.stop()
+                    next_keepalive_deadline = time.monotonic() + KEEPALIVE_INTERVAL_SECONDS
                     continue
                 else:
                     continue
                 gripper.move(current_position)
+                next_keepalive_deadline = time.monotonic() + KEEPALIVE_INTERVAL_SECONDS
 
     except KeyboardInterrupt:
         print("程序被用户中断")
