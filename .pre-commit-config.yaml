@@ -1,0 +1,63 @@
+# pre-commit 钩子统一管理：commit 前自动跑 Ruff / clang-format / cpplint。
+# 第一次使用：
+#     pip install pre-commit              # 或 uv pip install pre-commit
+#     pre-commit install                  # 注册 .git/hooks/pre-commit
+#     pre-commit run --all-files          # 一次性整改历史代码（首次落地建议跑一遍）
+
+# 仓库内所有钩子都不应触碰 ROS2 构建产物、上游 SDK、vendor 文档与 CAD 文件。
+exclude: |
+  (?x)^(
+      ros2_ws/build/.*|
+      ros2_ws/install/.*|
+      ros2_ws/log/.*|
+      ros2_ws/src/papillarray_ros2_v2/lib/.*|
+      ros2_ws/src/buttonsensor_ros2_v1/lib/.*|
+      vendor/.*|
+      cad/.*|
+      sensors/contactile_pts/docs/manuals/.*|
+      sensors/contactile_3dfbs/docs/manuals/.*|
+      docs/build/.*|
+      .*\.step
+  )$
+
+default_language_version:
+  python: python3.12
+
+repos:
+  # -------- 通用清洁工 --------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=2048"]
+
+  # -------- Python: Ruff（lint + format） --------
+  # 使用 pyproject.toml 中已经配置好的 google docstring 规范。
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.7.4
+    hooks:
+      - id: ruff
+        args: ["--fix", "--exit-non-zero-on-fix"]
+      - id: ruff-format
+
+  # -------- C++: clang-format --------
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v18.1.8
+    hooks:
+      - id: clang-format
+        types_or: [c, c++]
+
+  # -------- C++: cpplint（Google 风格） --------
+  - repo: https://github.com/cpplint/cpplint
+    rev: 2.0.0
+    hooks:
+      - id: cpplint
+        args: ["--quiet"]
+        types_or: [c, c++]

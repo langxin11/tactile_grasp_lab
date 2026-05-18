@@ -20,8 +20,11 @@ dev = [
 
 [tool.ruff]
 line-length = 100
+
+[tool.ruff.lint]
 select = ["D", "E", "F", "I", "W", "UP"]
-ignore = ["E501", "D203", "D213", "D100", "D104"]
+# 与根 pyproject 同步：D415 不支持中文句号、D105/D107 在 Google 风格里非必需。
+ignore = ["E501", "D100", "D104", "D203", "D213", "D415", "D105", "D107"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

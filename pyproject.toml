@@ -18,6 +18,7 @@ dependencies = [
 dev = [
     "ruff>=0.3.0",
     "mypy>=1.8.0",
+    "pre-commit>=3.7.0",
 ]
 docs = [
     "sphinx>=7.3",
@@ -32,11 +33,25 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["D", "E", "F", "I", "W", "UP"]
-ignore = ["E501", "D203", "D213", "D100", "D104", "D415"]
+select = ["D", "E", "F", "I", "W", "UP","N","G"]
+# D100/D104    模块/包级 docstring 不强制要求
+# D203/D213    与 google 风格冲突的两条 D 子规则
+# D415         首行结尾标点判定不支持中文全角句号「。」
+# D105/D107    魔术方法 / __init__ 的 docstring 在 Google 风格里非必需
+ignore = ["E501", "D100", "D104", "D203", "D213", "D415", "D105", "D107"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# ROS2 ament_python 模板文件不应被 docstring 规则约束。
+"ros2_ws/src/*/setup.py" = ["D"]
+"ros2_ws/src/*/test/test_*.py" = ["D"]
+"ros2_ws/src/*/launch/*.launch.py" = ["D"]
+"ros2_ws/src/*/resource/*" = ["D"]
+"docs/source/conf.py" = ["D"]
+# __init__.py 通常仅做导出，无需为每个符号补 docstring。
+"**/__init__.py" = ["D"]
 
 [tool.ruff.format]
 quote-style = "double"
