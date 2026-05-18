@@ -18,7 +18,9 @@
 //   5. 建立串口连接
 // ============================================================================
 ButtonSensorNode::ButtonSensorNode([[maybe_unused]] const rclcpp::NodeOptions& options)
-    : Node("buttonsensor_ros2_v1_node"), listener_(true) {
+    : Node("buttonsensor_ros2_v1_node"), listener_(false) {
+  // listener_ 参数: isLogging=false，禁用 SDK 内置 CSV 日志（改为本节点自行写 CSV，
+  // 解决 SDK 日志文件权限 000 不可读的问题，并通过 log_dir 参数控制输出路径）
   // ---- 加载参数 ----
   RCLCPP_INFO(this->get_logger(), "Loading parameters...\n");
   hub_id_ = this->declare_parameter("hub_id", 0);
@@ -48,6 +50,12 @@ ButtonSensorNode::ButtonSensorNode([[maybe_unused]] const rclcpp::NodeOptions& o
 
   sampling_rate_ = this->declare_parameter("sampling_rate", 0);
   RCLCPP_INFO(this->get_logger(), "Sampling rate: %d Hz", sampling_rate_);
+
+  log_dir_ = this->declare_parameter("log_dir", std::string(""));
+  csv_log_enabled_ = !log_dir_.empty();
+  if (csv_log_enabled_) {
+    RCLCPP_INFO(this->get_logger(), "CSV log enabled: dir=%s", log_dir_.c_str());
+  }
 
   RCLCPP_INFO(this->get_logger(), "Loaded parameters.\n");
 
@@ -90,6 +98,22 @@ ButtonSensorNode::ButtonSensorNode([[maybe_unused]] const rclcpp::NodeOptions& o
     rclcpp::shutdown();
   } else {
     RCLCPP_INFO(this->get_logger(), "\033[92mConnected to port: %s\033[0m", port_.c_str());
+
+    // 打开 CSV 日志文件
+    if (csv_log_enabled_) {
+      mkdir(log_dir_.c_str(), 0755);
+      auto now_t = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+      std::ostringstream fname;
+      fname << log_dir_ << "/LOG_hub" << hub_id_ << "_" << now_t << ".csv";
+      csv_file_.open(fname.str());
+      if (!csv_file_.is_open()) {
+        RCLCPP_ERROR(this->get_logger(), "Failed to open CSV log file: %s", fname.str().c_str());
+        csv_log_enabled_ = false;
+      } else {
+        csv_file_ << "T_us,sensor_id,G_FX,G_FY,G_FZ\n";
+        RCLCPP_INFO(this->get_logger(), "CSV log file opened: %s", fname.str().c_str());
+      }
+    }
   }
 
   // 注意：以下采样率设置代码已注释。SDK 内部已通过参数完成配置，
@@ -133,6 +157,12 @@ void ButtonSensorNode::updateData() {
 
     // 发布传感器状态消息到对应话题
     sensor_pubs_[sensor_id]->publish(ss_msg);
+
+    // CSV 日志写入
+    if (csv_log_enabled_ && csv_file_.is_open()) {
+      csv_file_ << timestamp_us << ',' << sensor_id << ',' << globalForce[X_IND] << ','
+                << globalForce[Y_IND] << ',' << globalForce[Z_IND] << '\n';
+    }
   }
 }
 

@@ -40,6 +40,9 @@ def generate_launch_description():
     sampling_rate_arg = DeclareLaunchArgument(
         "sampling_rate", default_value="500", description="采样率（Hz），支持 100/250/500/1000"
     )
+    log_dir_arg = DeclareLaunchArgument(
+        "log_dir", default_value="", description="CSV log output directory; empty to disable"
+    )
 
     # ---- 构建启动描述 ----
     return LaunchDescription(
@@ -51,6 +54,7 @@ def generate_launch_description():
             parity_arg,
             byte_size_arg,
             sampling_rate_arg,
+            log_dir_arg,
             Node(
                 package="buttonsensor_ros2_v1",
                 executable="buttonsensor_ros2_node",
@@ -64,6 +68,7 @@ def generate_launch_description():
                     {"parity": LaunchConfiguration("parity")},
                     {"byte_size": LaunchConfiguration("byte_size")},
                     {"sampling_rate": LaunchConfiguration("sampling_rate")},
+                    {"log_dir": LaunchConfiguration("log_dir")},
                 ],
             ),
         ]

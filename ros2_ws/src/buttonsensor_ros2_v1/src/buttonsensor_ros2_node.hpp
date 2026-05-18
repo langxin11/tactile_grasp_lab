@@ -5,9 +5,12 @@
 #pragma once
 
 #include <stdio.h>
+#include <sys/stat.h>
 
 #include <chrono>
+#include <fstream>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -46,9 +49,11 @@ class ButtonSensorNode : public rclcpp::Node {
   // 构造函数：加载参数、创建传感器实例、注册发布者与服务，并建立串口连接
   explicit ButtonSensorNode(const rclcpp::NodeOptions& options);
 
-  // 析构函数：停止监听、断开串口连接
+  // 析构函数：停止监听、关闭 CSV 日志并断开串口连接
   ~ButtonSensorNode() {
-    // 停止数据监听并断开 COM 口连接
+    if (csv_file_.is_open()) {
+      csv_file_.close();
+    }
     listener_.stopListeningAndDisconnect();
   }
 
@@ -74,6 +79,11 @@ class ButtonSensorNode : public rclcpp::Node {
   // ==== ROS 发布者 ====
   // 每个传感器对应一个独立的话题发布者
   std::vector<rclcpp::Publisher<sensor_interfaces::msg::ButtonSensorState>::SharedPtr> sensor_pubs_;
+
+  // ==== CSV 日志 ====
+  bool csv_log_enabled_ = false;  // 是否启用 CSV 日志
+  std::ofstream csv_file_;        // CSV 输出文件流
+  std::string log_dir_;           // CSV 输出目录路径
 
   // ==== ROS 服务 ====
   // Bias 请求服务：供外部节点调用以触发传感器零位校准
