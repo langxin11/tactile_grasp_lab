@@ -59,6 +59,19 @@ def generate_launch_description():
     sampling_rate_arg = DeclareLaunchArgument(
         "sampling_rate", default_value="500", description="Rate (Hz): 100, 250, 500, or 1000"
     )
+    # log_dir: CSV 日志输出目录
+    # 非空时启用节点自行写 CSV（禁用 SDK 内置日志），空字符串则不写。
+    log_dir_arg = DeclareLaunchArgument(
+        "log_dir", default_value="", description="CSV log output directory; empty to disable"
+    )
+    # csv_pillar_detail: 是否展开逐柱体数据列
+    # true: 匹配 SDK 原格式，所有传感器数据合并一行
+    # false: 每传感器独立一行，仅全局力/力矩（列数少，便于分析）
+    csv_pillar_detail_arg = DeclareLaunchArgument(
+        "csv_pillar_detail",
+        default_value="false",
+        description="Expand per-pillar displacement/force columns in CSV",
+    )
 
     return LaunchDescription(
         [
@@ -70,11 +83,13 @@ def generate_launch_description():
             byte_size_arg,
             is_flush_arg,
             sampling_rate_arg,
+            log_dir_arg,
+            csv_pillar_detail_arg,
             Node(
                 package="papillarray_ros2_v2",
                 executable="papillarray_ros2_node",
                 name="papillarray_ros2_node",
-                output="screen",
+                output="log",
                 # 启动触觉发布节点，将传感器数据以 SensorState 消息格式发布到
                 # /hub_<hub_id>/sensor_<sensor_id> 话题。
                 parameters=[
@@ -86,6 +101,8 @@ def generate_launch_description():
                     {"byte_size": LaunchConfiguration("byte_size")},
                     {"is_flush": LaunchConfiguration("is_flush")},
                     {"sampling_rate": LaunchConfiguration("sampling_rate")},
+                    {"log_dir": LaunchConfiguration("log_dir")},
+                    {"csv_pillar_detail": LaunchConfiguration("csv_pillar_detail")},
                 ],
             ),
         ]

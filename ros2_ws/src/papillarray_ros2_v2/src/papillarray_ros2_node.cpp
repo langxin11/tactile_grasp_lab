@@ -15,8 +15,9 @@
 // ==== 构造函数：参数加载、传感器初始化、服务注册、串口连接、定时器启动 ====
 
 PapillArrayNode::PapillArrayNode([[maybe_unused]] const rclcpp::NodeOptions& options)
-    : Node("papillarray_ros2_v2_node"), listener_(true) {
-  // listener_ 参数: isLogging=true 时启用 CSV 日志记录，日志输出到 /home/.ros/Logs
+    : Node("papillarray_ros2_v2_node"), listener_(false) {
+  // listener_ 参数: isLogging=false，禁用 SDK 内置 CSV 日志（改为本节点自行写 CSV，
+  // 解决 SDK 日志文件权限 000 不可读的问题，并通过 log_dir 参数控制输出路径）
 
   // ==== 1. 加载 ROS 参数 ====
 
@@ -51,6 +52,14 @@ PapillArrayNode::PapillArrayNode([[maybe_unused]] const rclcpp::NodeOptions& opt
 
   sampling_rate_ = this->declare_parameter("sampling_rate", 0);
   RCLCPP_INFO(this->get_logger(), "Sampling rate: %d Hz", sampling_rate_);
+
+  log_dir_ = this->declare_parameter("log_dir", std::string(""));
+  csv_pillar_detail_ = this->declare_parameter("csv_pillar_detail", false);
+  csv_log_enabled_ = !log_dir_.empty();
+  if (csv_log_enabled_) {
+    RCLCPP_INFO(this->get_logger(), "CSV log enabled: dir=%s, pillar_detail=%d", log_dir_.c_str(),
+                csv_pillar_detail_);
+  }
 
   RCLCPP_INFO(this->get_logger(), "Loaded parameters.\n");
 
@@ -119,6 +128,52 @@ PapillArrayNode::PapillArrayNode([[maybe_unused]] const rclcpp::NodeOptions& opt
     rclcpp::shutdown();
   } else {
     RCLCPP_INFO(this->get_logger(), "\033[92mConnected to port: %s\033[0m", port_.c_str());
+
+    // 打开 CSV 日志文件（在串口连接成功后，确保能获取到传感器数量）
+    if (csv_log_enabled_) {
+      mkdir(log_dir_.c_str(), 0755);
+      auto now_t = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+      std::ostringstream fname;
+      fname << log_dir_ << "/LOG_hub" << hub_id_ << "_" << now_t << ".csv";
+      csv_file_.open(fname.str());
+      if (!csv_file_.is_open()) {
+        RCLCPP_ERROR(this->get_logger(), "Failed to open CSV log file: %s", fname.str().c_str());
+        csv_log_enabled_ = false;
+      } else {
+        if (csv_pillar_detail_) {
+          // 完整表头：匹配 SDK 原格式，所有传感器数据在一行
+          csv_file_ << "T_us";
+          for (int s = 0; s < n_sensors_; ++s) {
+            for (int p = 0; p < MAX_NPILLAR; ++p) {
+              csv_file_ << ",S" << s << "_P" << p << "_DX"
+                        << ",S" << s << "_P" << p << "_DY"
+                        << ",S" << s << "_P" << p << "_DZ"
+                        << ",S" << s << "_P" << p << "_FX"
+                        << ",S" << s << "_P" << p << "_FY"
+                        << ",S" << s << "_P" << p << "_FZ";
+            }
+            csv_file_ << ",S" << s << "_G_FX"
+                      << ",S" << s << "_G_FY"
+                      << ",S" << s << "_G_FZ"
+                      << ",S" << s << "_G_TX"
+                      << ",S" << s << "_G_TY"
+                      << ",S" << s << "_G_TZ"
+                      << ",S" << s << "_isSDActive"
+                      << ",S" << s << "_isRefLoaded";
+            for (int p = 0; p < MAX_NPILLAR; ++p) {
+              csv_file_ << ",S" << s << "_P" << p << "_isInContact"
+                        << ",S" << s << "_P" << p << "_slipState";
+            }
+            csv_file_ << ",S" << s << "_FRIC";
+          }
+          csv_file_ << '\n';
+        } else {
+          // 简化表头：每传感器独立一行，仅全局量
+          csv_file_ << "T_us,sensor_id,G_FX,G_FY,G_FZ,G_TX,G_TY,G_TZ,isSDActive,isRefLoaded,FRIC\n";
+        }
+        RCLCPP_INFO(this->get_logger(), "CSV log file opened: %s", fname.str().c_str());
+      }
+    }
   }
 
   // ==== 5. 设置采样率并启动定时器 ====
@@ -146,6 +201,11 @@ PapillArrayNode::PapillArrayNode([[maybe_unused]] const rclcpp::NodeOptions& opt
 void PapillArrayNode::updateData() {
   if (n_sensors_ == 0) {
     return;
+  }
+
+  std::ostringstream csv_row;
+  if (csv_log_enabled_ && csv_pillar_detail_ && csv_file_.is_open()) {
+    csv_row << sensors_[0]->getTimestamp_us();
   }
 
   for (size_t sensor_id = 0; sensor_id < sensors_.size(); sensor_id++) {
@@ -229,6 +289,43 @@ void PapillArrayNode::updateData() {
 
     // 发布该传感器的完整状态消息
     sensor_pubs_[sensor_id]->publish(*ss_msg);
+
+    // CSV 日志写入
+    if (csv_log_enabled_ && csv_file_.is_open()) {
+      if (csv_pillar_detail_) {
+        // 完整模式：逐柱体展开列，追加到行累积器
+        for (int pillar_id = 0; pillar_id < MAX_NPILLAR; ++pillar_id) {
+          double pd[NDIM] = {0}, pf[NDIM] = {0};
+          if (pillar_id < n_pillar) {
+            sensors_[sensor_id]->getPillarDisplacements(pillar_id, pd);
+            sensors_[sensor_id]->getPillarForces(pillar_id, pf);
+          }
+          csv_row << ',' << pd[X_IND] << ',' << pd[Y_IND] << ',' << pd[Z_IND] << ',' << pf[X_IND]
+                  << ',' << pf[Y_IND] << ',' << pf[Z_IND];
+        }
+        csv_row << ',' << globalForce[X_IND] << ',' << globalForce[Y_IND] << ','
+                << globalForce[Z_IND] << ',' << globalTorque[X_IND] << ',' << globalTorque[Y_IND]
+                << ',' << globalTorque[Z_IND] << ',' << is_sd_active << ',' << is_ref_loaded;
+        for (int pillar_id = 0; pillar_id < MAX_NPILLAR; ++pillar_id) {
+          bool contact = pillar_id < n_pillar ? contact_states[pillar_id] : false;
+          int slip = pillar_id < n_pillar ? slip_states[pillar_id] : -2;
+          csv_row << ',' << contact << ',' << slip;
+        }
+        csv_row << ',' << sensors_[sensor_id]->getFrictionEstimate();
+      } else {
+        // 简化模式：每传感器独立一行
+        csv_file_ << timestamp_us << ',' << sensor_id << ',' << globalForce[X_IND] << ','
+                  << globalForce[Y_IND] << ',' << globalForce[Z_IND] << ',' << globalTorque[X_IND]
+                  << ',' << globalTorque[Y_IND] << ',' << globalTorque[Z_IND] << ',' << is_sd_active
+                  << ',' << is_ref_loaded << ',' << sensors_[sensor_id]->getFrictionEstimate()
+                  << '\n';
+      }
+    }
+  }
+
+  // 完整模式：所有传感器数据收集完毕，写入一行
+  if (csv_log_enabled_ && csv_pillar_detail_ && csv_file_.is_open()) {
+    csv_file_ << csv_row.str() << '\n';
   }
 }
 

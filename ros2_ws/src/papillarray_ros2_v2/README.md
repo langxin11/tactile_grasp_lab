@@ -51,6 +51,36 @@ ros2 launch papillarray_ros2_v2 papillarray.launch.py \
   sampling_rate:=500
 ```
 
+## CSV 日志
+
+本节点默认禁用 SDK 内置的 CSV 日志（SDK 生成的日志文件权限为 `000`，不可读），
+改为由节点自行写 CSV，可通过以下参数控制：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `log_dir` | string | `””` | CSV 输出目录路径，空字符串表示禁用 |
+| `csv_pillar_detail` | bool | `false` | 是否展开逐柱体位移/力列 |
+
+### 简化模式（默认）
+
+`csv_pillar_detail=false`，每个传感器独立一行，列：`T_us, sensor_id, G_FX, G_FY, G_FZ, G_TX, G_TY, G_TZ, isSDActive, isRefLoaded, FRIC`。
+
+```bash
+ros2 launch papillarray_ros2_v2 papillarray.launch.py log_dir:=/home/xiaodalaing/ros_logs
+```
+
+### 完整模式
+
+`csv_pillar_detail=true`，匹配 SDK 原格式，所有传感器合并为一行，每个传感器包含 9 柱体 × 6 列位移/力 + 接触/滑动状态 + 全局力/力矩/摩擦。
+
+```bash
+ros2 launch papillarray_ros2_v2 papillarray.launch.py \
+  log_dir:=/home/xiaodalaing/ros_logs \
+  csv_pillar_detail:=true
+```
+
+日志文件命名：`<log_dir>/LOG_hub<hub_id>_<unix_timestamp>.csv`。
+
 ## 服务
 
 当前包提供：
@@ -61,7 +91,7 @@ ros2 launch papillarray_ros2_v2 papillarray.launch.py \
 
 ## 说明
 
-- 这是触觉“数据发布层”，不是控制器；
+- 这是触觉”数据发布层”，不是控制器；
 - 它不负责夹爪驱动；
 - 它不负责抓取状态机；
 - 它的输出消息和 `sensor_interfaces` 必须保持一致。
