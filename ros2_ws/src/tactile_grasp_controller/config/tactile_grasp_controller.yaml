@@ -62,9 +62,11 @@ tactile_grasp_controller:
     # approach 用于接触前慢速闭合；
     # preload 用于建立最小预紧；
     # compensate 用于滑移或摩擦裕度不足时的小步补夹。
+    # release 用于保持阶段超出目标力带时的小步回开。
     approach_position_step: 1
     preload_position_step: 1
     compensate_position_step: 1
+    release_position_step: 1
 
     # 命令位置边界：
     # initial_position 是 controller 对“当前命令位置”的初始估计，不是真实反馈。
@@ -74,12 +76,16 @@ tactile_grasp_controller:
 
     # 力阈值，单位 N：
     # min_preload_force_n：进入 HOLD 前要求达到的最小预紧力
-    # min_hold_force_n：保持阶段的最低法向力
+    # min_hold_force_n：兼容保留的最低保持力参数
+    # target_hold_force_n：保持阶段希望维持的目标法向力
+    # hold_force_deadband_n：目标法向力允许波动带半宽
     # max_safe_force_n：超过后进入超力保护判断
     # max_safe_force_consecutive_frames：连续多少帧超限才进入 FAULT
     min_preload_force_n: 3.0
     min_hold_force_n: 2.0
-    max_safe_force_n: 20.0
+    target_hold_force_n: 10.0
+    hold_force_deadband_n: 1.0
+    max_safe_force_n: 10.0
     max_safe_force_consecutive_frames: 3
 
     # 摩擦估计：

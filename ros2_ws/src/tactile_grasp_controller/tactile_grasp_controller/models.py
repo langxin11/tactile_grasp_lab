@@ -13,8 +13,8 @@ class ControlAction:
     """状态机返回的控制命令。
 
     Attributes:
-        name: 动作名称，如 "close_step"、"hold"、"open"、"fault"。
-        step: 闭合步长（仅 close_step 动作有效）。
+        name: 动作名称，如 "close_step"、"open_step"、"hold"、"open"、"fault"。
+        step: 位置步长（对 close_step / open_step 动作有效）。
         reason: 执行该动作的原因描述。
         suggested_speed: 建议的速度字节；0 表示使用默认映射。
     """

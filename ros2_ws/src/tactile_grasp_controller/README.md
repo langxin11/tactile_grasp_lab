@@ -82,9 +82,18 @@
 - `start_force_threshold_n: 5.0`
 - `control_rate_hz: 40.0`
 - `approach/preload/compensate_position_step: 1`
+- `release_position_step: 1`
+- `target_hold_force_n: 10.0`
+- `hold_force_deadband_n: 1.0`
 - `target_command_rate_bytes_per_s: 80.0`
 - `min_speed_byte: 8`
 - `max_speed_byte: 32`
+
+当前保持逻辑不是“纯保持当前位置”，而是“目标力带内保持”：
+
+- `fn_min < target_hold_force_n - hold_force_deadband_n` 时，重新补夹；
+- `fn_min > target_hold_force_n + hold_force_deadband_n` 时，小步回开；
+- 只有落在目标力带内，才真正保持不动。
 
 适合：
 

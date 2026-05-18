@@ -168,6 +168,14 @@ class CommandBridge:
             suggested_speed=suggested_speed,
         )
 
+    def open_step(self, step: int) -> bool:
+        """Open by a byte-like step from the current command estimate."""
+        suggested_speed = self.suggested_speed_for_step(step)
+        return self.publish_position(
+            self.current_command_position - int(step),
+            suggested_speed=suggested_speed,
+        )
+
     def hold(self) -> bool:
         """Hold the current command and send no new goal."""
         return True

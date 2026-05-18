@@ -131,11 +131,14 @@ class TactileGraspControllerNode(Node):
             "approach_position_step": 1,
             "preload_position_step": 1,
             "compensate_position_step": 1,
+            "release_position_step": 1,
             "min_position": 0,
             "max_position": 255,
             "initial_position": 0,
             "min_preload_force_n": 3.0,
             "min_hold_force_n": 2.0,
+            "target_hold_force_n": 10.0,
+            "hold_force_deadband_n": 1.0,
             "max_safe_force_n": 20.0,
             "max_safe_force_consecutive_frames": 3,
             "friction_mu_default": 0.4,
@@ -227,14 +230,16 @@ class TactileGraspControllerNode(Node):
         """根据动作名执行对应的 CommandBridge 操作。
 
         Args:
-            action_name: 动作名称 ("close_step", "open", 或其他)。
-            step: 闭合步长，仅 close_step 动作使用。
+            action_name: 动作名称 ("close_step", "open_step", "open", 或其他)。
+            step: 位置步长，仅 step 类动作使用。
 
         Returns:
             动作是否成功发起。
         """
         if action_name == "close_step":
             return self.command_bridge.close_step(step)
+        if action_name == "open_step":
+            return self.command_bridge.open_step(step)
         if action_name == "open":
             return self.command_bridge.open()
         return self.command_bridge.hold()

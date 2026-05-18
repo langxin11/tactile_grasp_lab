@@ -108,6 +108,11 @@ class TactileGraspStateMachine:
 
         # ==== HOLD: 保持阶段，监控滑移和力下降 ====
         if self.state == "HOLD":
+            target_force_n = float(self.params["target_hold_force_n"])
+            deadband_n = float(self.params["hold_force_deadband_n"])
+            lower_force_n = target_force_n - deadband_n
+            upper_force_n = target_force_n + deadband_n
+
             if features["slip_detected"]:
                 self.state = "SLIP_COMPENSATE"
                 self.last_reason = "slip detected"
@@ -116,15 +121,21 @@ class TactileGraspStateMachine:
                 self.state = "SLIP_COMPENSATE"
                 self.last_reason = "friction margin low"
                 return ControlAction(name="hold", reason=self.last_reason)
-            if features["fn_min"] < float(self.params["min_hold_force_n"]):
+            if features["fn_min"] < lower_force_n:
                 self.state = "PRELOAD"
-                self.last_reason = "hold force dropped"
+                self.last_reason = "hold force below target band"
                 return ControlAction(
                     name="close_step",
                     step=int(self.params["preload_position_step"]),
                     reason=self.last_reason,
                 )
-            return ControlAction(name="hold", reason="holding position")
+            if features["fn_min"] > upper_force_n:
+                return ControlAction(
+                    name="open_step",
+                    step=int(self.params["release_position_step"]),
+                    reason="hold force above target band",
+                )
+            return ControlAction(name="hold", reason="holding force within target band")
 
         # ==== SLIP_COMPENSATE: 滑移补偿，冷却后闭合一步并回到 HOLD ====
         if self.state == "SLIP_COMPENSATE":

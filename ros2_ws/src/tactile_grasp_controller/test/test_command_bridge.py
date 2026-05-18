@@ -151,6 +151,25 @@ def test_close_step_publishes_streaming_command_with_suggested_speed() -> None:
     assert message.speed == 20
 
 
+def test_open_step_publishes_streaming_command_with_suggested_speed() -> None:
+    """open_step should stream the updated target in the opening direction."""
+    publisher = FakeStreamingPublisher()
+    bridge = CommandBridge(
+        FakeNode(),
+        make_params(),
+        action_client_factory=lambda node, action_type, action_name: FakeActionClient(),
+        streaming_publisher_factory=lambda msg_type, topic, qos: publisher,
+        streaming_message_factory=FakeStreamingMessage,
+    )
+    bridge.sync_echo(10)
+
+    assert bridge.open_step(1)
+    assert bridge.current_command_position == 9
+    message = publisher.messages[0]
+    assert message.target_position == 9
+    assert message.speed == 20
+
+
 def test_dry_run_does_not_send_goal_or_stream() -> None:
     """dry_run still updates the estimate but does not create outbound commands."""
     bridge = CommandBridge(FakeNode(), make_params(dry_run=True))

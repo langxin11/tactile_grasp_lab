@@ -4,6 +4,11 @@ tactile_grasp_controller:
     # 在基础配置 tactile_grasp_controller.yaml 之上叠加这些参数。
     dry_run: false
 
-    # 真机抓取把控制频率提到 40 Hz，减轻 +1 步进带来的顿挫感，
-    # 同时仍避免把 Robotiq 当作高频力控执行器。
-    control_rate_hz: 40.0
+    # 真机抓取当前试验频率为 50 Hz，用于提高力带调节的刷新率；
+    # 基础配置仍保留 40 Hz，避免把所有场景默认一起抬高。
+    control_rate_hz: 50.0
+
+    # 真机默认先用目标 10 N、±1 N 死区的双向保持。
+    target_hold_force_n: 10.0
+    hold_force_deadband_n: 1.0
+    release_position_step: 1
