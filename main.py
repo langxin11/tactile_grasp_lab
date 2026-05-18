@@ -107,9 +107,9 @@ def raw_terminal():
 
 
 def _read_escape_sequence():
-    """读取 ESC 之后的 ANSI 转义序列并归一化为按键名称。
+    r"""读取 ESC 之后的 ANSI 转义序列并归一化为按键名称。
 
-    由 :func:`read_key` 在收到 ``\\x1b`` 之后调用。使用短超时区分单击 Esc
+    由 :func:`read_key` 在收到 ``\x1b`` 之后调用。使用短超时区分单击 Esc
     与方向键序列，并兼容 ``ESC[1~`` / ``ESC[4~`` 等 Home/End 变体。
 
     Returns:

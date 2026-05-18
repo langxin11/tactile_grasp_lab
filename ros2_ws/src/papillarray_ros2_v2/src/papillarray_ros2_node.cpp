@@ -8,6 +8,9 @@
 
 #include <array>
 #include <chrono>
+#include <memory>
+#include <string>
+#include <utility>
 
 // ==== 构造函数：参数加载、传感器初始化、服务注册、串口连接、定时器启动 ====
 
@@ -110,8 +113,8 @@ PapillArrayNode::PapillArrayNode([[maybe_unused]] const rclcpp::NodeOptions& opt
   // ==== 4. 建立串口连接 ====
 
   RCLCPP_INFO(this->get_logger(), "Connecting to %s port...", port_.c_str());
-  if (listener_.connectAndStartListening(port_.c_str(), baud_rate_, parity_, char(byte_size_),
-                                         is_flush_)) {
+  if (listener_.connectAndStartListening(port_.c_str(), baud_rate_, parity_,
+                                         static_cast<char>(byte_size_), is_flush_)) {
     RCLCPP_FATAL(this->get_logger(), "\033[91mFailed to connect to port: %s\033[0m", port_.c_str());
     rclcpp::shutdown();
   } else {
@@ -153,7 +156,7 @@ void PapillArrayNode::updateData() {
     ss_msg->header.frame_id =
         "hub_" + std::to_string(hub_id_) + "/sensor_" + std::to_string(sensor_id);
 
-    long timestamp_us = sensors_[sensor_id]->getTimestamp_us();
+    int64_t timestamp_us = sensors_[sensor_id]->getTimestamp_us();
     ss_msg->tus = timestamp_us;
 
     double globalForce[NDIM];

@@ -2,8 +2,7 @@
 // 简要: ButtonSensor ROS2 节点类声明，封装触觉传感器监听器（PTSDKListener），
 //       负责多传感器数据读取、发布 Bias 服务及传感器状态话题。
 
-#ifndef BUTTONSENSOR_ROS2_V1_NODE_HPP_
-#define BUTTONSENSOR_ROS2_V1_NODE_HPP_
+#pragma once
 
 #include <stdio.h>
 
@@ -45,7 +44,7 @@
 class ButtonSensorNode : public rclcpp::Node {
  public:
   // 构造函数：加载参数、创建传感器实例、注册发布者与服务，并建立串口连接
-  ButtonSensorNode(const rclcpp::NodeOptions& options);
+  explicit ButtonSensorNode(const rclcpp::NodeOptions& options);
 
   // 析构函数：停止监听、断开串口连接
   ~ButtonSensorNode() {
@@ -57,7 +56,7 @@ class ButtonSensorNode : public rclcpp::Node {
   void updateData();
 
   // 获取当前采样率（Hz）
-  int getSamplingRate() { return sampling_rate_; };
+  int getSamplingRate() { return sampling_rate_; }
 
  private:
   int hub_id_;         // 集线器 ID
@@ -86,5 +85,3 @@ class ButtonSensorNode : public rclcpp::Node {
       [[maybe_unused]] const std::shared_ptr<sensor_interfaces::srv::BiasRequest::Request> request,
       std::shared_ptr<sensor_interfaces::srv::BiasRequest::Response> response);
 };
-
-#endif  // BUTTONSENSOR_ROS2_V1_NODE_H_

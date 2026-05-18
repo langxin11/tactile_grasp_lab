@@ -5,6 +5,10 @@
 
 #include "buttonsensor_ros2_node.hpp"
 
+#include <memory>
+#include <string>
+#include <utility>
+
 // ============================================================================
 // 构造函数：初始化 ROS2 节点
 //   1. 声明并加载 yaml/launch 参数（hub_id、n_sensors、串口配置等）
@@ -81,7 +85,7 @@ ButtonSensorNode::ButtonSensorNode([[maybe_unused]] const rclcpp::NodeOptions& o
 
   // ---- 建立串口连接 ----
   RCLCPP_INFO(this->get_logger(), "Connecting to %s port...", port_.c_str());
-  if (listener_.connect(port_.c_str(), baud_rate_, parity_, char(byte_size_))) {
+  if (listener_.connect(port_.c_str(), baud_rate_, parity_, static_cast<char>(byte_size_))) {
     RCLCPP_FATAL(this->get_logger(), "\033[91mFailed to connect to port: %s\033[0m", port_.c_str());
     rclcpp::shutdown();
   } else {
@@ -93,8 +97,8 @@ ButtonSensorNode::ButtonSensorNode([[maybe_unused]] const rclcpp::NodeOptions& o
   // // Set sampling rate
   // RCLCPP_INFO(this->get_logger(), "Setting sampling rate to %u...", sampling_rate_);
   // if (!listener_.setSamplingRate(sampling_rate_)) {
-  // 	RCLCPP_WARN(this->get_logger(), "\033[91mFailed to set sampling rate to: %u\033[0m",
-  // sampling_rate_); } else { 	RCLCPP_INFO(this->get_logger(), "\033[92mSampling rate set to
+  //   RCLCPP_WARN(this->get_logger(), "\033[91mFailed to set sampling rate to: %u\033[0m",
+  //   sampling_rate_); } else {   RCLCPP_INFO(this->get_logger(), "\033[92mSampling rate set to
   // %u\033[0m", sampling_rate_);
   // }
 }
@@ -117,7 +121,7 @@ void ButtonSensorNode::updateData() {
 
     auto time = now();
 
-    long timestamp_us = sensors_[sensor_id]->getTimestamp_us();
+    int64_t timestamp_us = sensors_[sensor_id]->getTimestamp_us();
     ss_msg.tus = timestamp_us;
 
     // 读取全局力（三维分量 X, Y, Z），单位为 counts（原始 ADC 值）

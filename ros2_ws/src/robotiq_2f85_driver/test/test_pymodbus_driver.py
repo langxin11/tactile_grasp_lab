@@ -27,7 +27,7 @@ class _FakeResult:
         """
         self.registers = registers
 
-    def isError(self) -> bool:
+    def isError(self) -> bool:  # noqa: N802  # 镜像 pymodbus 真实接口命名
         """模拟无错误返回。"""
         return False
 

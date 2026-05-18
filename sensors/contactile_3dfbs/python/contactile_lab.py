@@ -97,10 +97,12 @@ class Sample:
 
     @property
     def force_norm(self) -> float:
+        """三轴合力的欧氏范数。"""
         return math.sqrt(self.fx * self.fx + self.fy * self.fy + self.fz * self.fz)
 
     @property
     def row(self) -> dict[str, float | int]:
+        """将本帧样本展平为可写 CSV / DataFrame 的字典。"""
         return {
             "timestamp_us": self.timestamp_us,
             "t_monotonic_ns": self.t_monotonic_ns,
@@ -298,12 +300,14 @@ class SensorSession:
         self.close()
 
     def close(self) -> None:
+        """停止监听并关闭串口连接,可重复调用。"""
         if self.listener is not None:
             self.listener.stopListeningAndDisconnect()
             self.listener = None
             typer.echo("已断开")
 
     def read_current(self) -> Sample:
+        """读取当前配置传感器的一帧样本(已应用 bias 偏移)。"""
         return self.read_sensor(self.sensor_index)
 
     def _read_raw(self, sensor_index: int) -> Sample:
@@ -319,6 +323,14 @@ class SensorSession:
         )
 
     def read_sensor(self, sensor_index: int) -> Sample:
+        """读取指定传感器的一帧样本并应用 bias 偏移。
+
+        Args:
+            sensor_index: 传感器索引,范围由 SDK 决定。
+
+        Returns:
+            Sample: 减去 bias 偏移后的样本帧。
+        """
         raw = self._read_raw(sensor_index)
         offset = self._force_offsets.get(sensor_index, ForceOffset(0.0, 0.0, 0.0))
         return Sample(
@@ -627,11 +639,13 @@ class LiveState:
         self.count = 0
 
     def append(self, sample: MultiSample) -> None:
+        """线程安全地追加一帧多传感器样本。"""
         with self.lock:
             self.samples.append(sample)
             self.count += 1
 
     def snapshot(self) -> list[MultiSample]:
+        """返回当前缓冲区的快照副本(不持有锁地遍历用)。"""
         with self.lock:
             return list(self.samples)
 
@@ -1054,7 +1068,6 @@ def live(
                 t_latest = latest.timestamp_us
                 window_start = t_latest - int(window_sec * 1_000_000)
                 visible = [s for s in samples if s.timestamp_us >= window_start]
-                xs = [(s.timestamp_us - t_latest) / 1_000_000.0 for s in visible]
                 for sensor_index in sensors:
                     dpg.set_axis_limits(y_axis_tags[sensor_index], -force_limit, force_limit)
                     visible_sensor_samples = [

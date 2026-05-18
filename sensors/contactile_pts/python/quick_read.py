@@ -16,6 +16,11 @@ import PTSDK_CXX_Pybind
 
 
 def main() -> int:
+    """命令行入口：连接 PTS、Bias 校准并打印若干帧三轴力数据。
+
+    Returns:
+        int: 进程退出码,0 表示成功。
+    """
     # 串口参数（Python SDK 默认 115200）
     port = "/dev/ttyACM0"
     baud_rate = 115200

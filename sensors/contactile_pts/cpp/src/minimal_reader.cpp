@@ -2,6 +2,11 @@
 // Contactile PTS 最简 C++ 读取示例
 // 基于原厂 SDK，单传感器、单线程、打印 XYZ 全局力
 
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
+#include <thread>
+
 // 兼容性修复头文件，必须在所有 vendor 头文件之前包含
 #include <PTSDKConstants.h>
 #include <PTSDKListener.h>
@@ -9,11 +14,6 @@
 #include "ptsdk_compat.h"
 // 注意：PTSDKListener.h 内部已包含 PTSDKSensor.h，且该头文件的 include guard 有 bug，
 // 若再次显式包含会导致类重复定义。因此此处不再 #include <PTSDKSensor.h>
-
-#include <chrono>
-#include <cstdio>
-#include <cstdlib>
-#include <thread>
 
 int main(int argc, char* argv[]) {
   (void)argc;

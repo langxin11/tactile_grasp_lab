@@ -3,8 +3,7 @@
 //       通过串口连接 Contactile PapillArray 传感器硬件，发布传感器状态消息，
 //       并提供滑动检测与偏置请求服务。
 
-#ifndef PAPILLARRAY_ROS2_V2_NODE_H_
-#define PAPILLARRAY_ROS2_V2_NODE_H_
+#pragma once
 
 // ==== 标准库头文件 ====
 
@@ -54,7 +53,7 @@
 class PapillArrayNode : public rclcpp::Node {
  public:
   // 构造函数：加载参数并初始化传感器、发布者、服务及串口连接
-  PapillArrayNode(const rclcpp::NodeOptions& options);
+  explicit PapillArrayNode(const rclcpp::NodeOptions& options);
 
   // 析构函数：停止监听并断开串口连接
   ~PapillArrayNode() { listener_.stopListeningAndDisconnect(); }
@@ -109,5 +108,3 @@ class PapillArrayNode : public rclcpp::Node {
       [[maybe_unused]] const std::shared_ptr<sensor_interfaces::srv::BiasRequest::Request> request,
       std::shared_ptr<sensor_interfaces::srv::BiasRequest::Response> response);
 };
-
-#endif  // PAPILLARRAY_ROS2_V2_NODE_H_

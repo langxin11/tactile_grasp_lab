@@ -15,6 +15,7 @@ import FBS3D_CXX_Pybind as fbs
 
 
 def main():
+    """命令行入口：连接 3DFBS、Bias 校准并打印若干次三轴力数据。"""
     parser = argparse.ArgumentParser(description="Contactile 3DFBS quick reader")
     parser.add_argument("--port", default="/dev/ttyACM0", help="串口设备路径")
     parser.add_argument("--count", type=int, default=10, help="读取次数")
@@ -24,7 +25,6 @@ def main():
     rate = 115200
     parity = 0
     byte_size = "\x08"
-    log_rate = fbs.PTSDKConstants.LOG_RATE_100
 
     # 预检查：避免进入 C++ 阻塞调用导致 Ctrl+C 失效
     if not os.path.exists(port):

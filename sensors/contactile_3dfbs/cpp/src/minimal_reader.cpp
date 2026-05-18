@@ -16,6 +16,7 @@
 #include <chrono>
 #include <cmath>
 #include <csignal>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -67,7 +68,7 @@ void printUsage(const char* program) {
 
 bool parseInt(const char* text, int* value) {
   char* end = nullptr;
-  long parsed = std::strtol(text, &end, 10);
+  auto parsed = std::strtol(text, &end, 10);  // strtol 返回 long, 用 auto 避免 cpplint runtime/int
   if (end == text || *end != '\0') {
     return false;
   }
@@ -239,10 +240,10 @@ int main(int argc, char* argv[]) {
   }
 
   auto wall_start = std::chrono::steady_clock::now();
-  unsigned long first_ts_us = 0;
-  unsigned long last_ts_us = 0;
-  unsigned long samples = 0;
-  unsigned long last_ts = 0;  // 用于去重，每次时间戳变化才计数
+  uint64_t first_ts_us = 0;
+  uint64_t last_ts_us = 0;
+  uint64_t samples = 0;
+  uint64_t last_ts = 0;  // 用于去重，每次时间戳变化才计数
 
   constexpr auto poll_interval = std::chrono::milliseconds(1);
 
@@ -254,8 +255,7 @@ int main(int argc, char* argv[]) {
     }
 
     // 获取当前最新传感器时间戳
-    unsigned long ts_us =
-        static_cast<unsigned long>(sensors[options.sensor_index].getTimestamp_us());
+    uint64_t ts_us = static_cast<uint64_t>(sensors[options.sensor_index].getTimestamp_us());
 
     // 时间戳未变化说明后台尚未收到新帧，短暂休眠后重试
     if (ts_us == last_ts) {
@@ -282,7 +282,7 @@ int main(int argc, char* argv[]) {
           << force[Z_IND] << ',' << force_norm << '\n';
     }
 
-    if (options.print_every > 0 && samples % static_cast<unsigned long>(options.print_every) == 0) {
+    if (options.print_every > 0 && samples % static_cast<uint64_t>(options.print_every) == 0) {
       printf("%12lu  %8.3f  %8.3f  %8.3f  %9.3f\n", ts_us, force[X_IND], force[Y_IND], force[Z_IND],
              force_norm);
     }
