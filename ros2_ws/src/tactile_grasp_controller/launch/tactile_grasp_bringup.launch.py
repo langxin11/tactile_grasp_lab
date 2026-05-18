@@ -58,6 +58,7 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument("gripper_baudrate", default_value="115200"),
         DeclareLaunchArgument("use_fake_gripper", default_value="false"),
         DeclareLaunchArgument("controller_config", default_value=controller_config_default),
+        DeclareLaunchArgument("controller_config_override", default_value=""),
     ]
 
     # 允许按层裁剪启动，方便单独调试某一个包。
@@ -91,7 +92,10 @@ def generate_launch_description() -> LaunchDescription:
     controller_stack = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(controller_launch),
         condition=IfCondition(LaunchConfiguration("start_controller")),
-        launch_arguments={"config": LaunchConfiguration("controller_config")}.items(),
+        launch_arguments={
+            "config": LaunchConfiguration("controller_config"),
+            "config_override": LaunchConfiguration("controller_config_override"),
+        }.items(),
     )
 
     return LaunchDescription(

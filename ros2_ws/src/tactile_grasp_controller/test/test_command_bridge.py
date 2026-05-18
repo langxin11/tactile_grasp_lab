@@ -1,8 +1,9 @@
-"""Unit tests for gripper action command bridging."""
+"""Unit tests for gripper command bridging."""
 
 import pytest
 from tactile_grasp_controller.command_bridge import (
     CommandBridge,
+    compute_suggested_speed,
     map_command_to_action_position,
 )
 
@@ -11,44 +12,72 @@ class FakeLogger:
     """Collect error logs without requiring a real ROS node."""
 
     def __init__(self) -> None:
-        """Initialize an empty error collection."""
         self.errors: list[str] = []
 
     def error(self, message: str) -> None:
-        """Record an error message."""
         self.errors.append(message)
+
+
+class FakeClock:
+    """Provide a deterministic ROS-like clock surface."""
+
+    def now(self) -> "FakeClock":
+        return self
+
+    def to_msg(self) -> object:
+        return object()
 
 
 class FakeNode:
     """Minimal node surface used by CommandBridge tests."""
 
     def __init__(self) -> None:
-        """Initialize a fake logger."""
         self.logger = FakeLogger()
+        self.clock = FakeClock()
 
     def get_logger(self) -> FakeLogger:
-        """Return the fake logger."""
         return self.logger
+
+    def get_clock(self) -> FakeClock:
+        return self.clock
 
 
 class FakeActionClient:
     """Capture GripperCommand goals sent by CommandBridge."""
 
     def __init__(self, available: bool = True) -> None:
-        """Initialize fake server availability and captured goals."""
         self.available = available
         self.goals: list[object] = []
         self.timeout_sec: float | None = None
 
     def wait_for_server(self, timeout_sec: float) -> bool:
-        """Return configured server availability."""
         self.timeout_sec = timeout_sec
         return self.available
 
     def send_goal_async(self, goal: object) -> object:
-        """Capture a goal and return a dummy future."""
         self.goals.append(goal)
         return object()
+
+
+class FakeStreamingPublisher:
+    """Capture streaming messages published by CommandBridge."""
+
+    def __init__(self) -> None:
+        self.messages: list[object] = []
+
+    def publish(self, message: object) -> None:
+        self.messages.append(message)
+
+
+class FakeStreamingMessage:
+    """Simple mutable object that mimics a ROS message."""
+
+    def __init__(self) -> None:
+        self.stamp = None
+        self.command_id = 0
+        self.target_position = 0
+        self.speed = 0
+        self.max_effort = 0.0
 
 
 def make_params(dry_run: bool = False) -> dict[str, object]:
@@ -58,6 +87,11 @@ def make_params(dry_run: bool = False) -> dict[str, object]:
         "min_position": 0,
         "max_position": 255,
         "initial_position": 0,
+        "control_rate_hz": 40.0,
+        "target_command_rate_bytes_per_s": 80.0,
+        "min_speed_byte": 8,
+        "max_speed_byte": 32,
+        "streaming_command_topic": "/robotiq/command/stream",
         "gripper_command_action": "/robotiq_gripper_controller/gripper_cmd",
         "gripper_open_position": 0.0,
         "gripper_closed_position": 0.8,
@@ -73,48 +107,61 @@ def test_maps_command_position_to_action_position() -> None:
     assert map_command_to_action_position(127, 0, 255, 0.0, 0.8) == pytest.approx(127 / 255 * 0.8)
 
 
-def test_open_sends_open_goal() -> None:
-    """Opening sends a GripperCommand goal at the configured open position."""
-    fake_client = FakeActionClient()
+def test_compute_suggested_speed_scales_with_rate_and_step() -> None:
+    """Suggested speed should rise with command-byte rate and respect configured bounds."""
+    assert compute_suggested_speed(1, 40.0, 80.0, 8, 32) == 20
+    assert compute_suggested_speed(2, 40.0, 80.0, 8, 32) == 32
+
+
+def test_open_publishes_streaming_command_when_available() -> None:
+    """Opening prefers the streaming path and uses the configured minimum speed."""
+    publisher = FakeStreamingPublisher()
     bridge = CommandBridge(
         FakeNode(),
         make_params(),
-        action_client_factory=lambda node, action_type, action_name: fake_client,
+        action_client_factory=lambda node, action_type, action_name: FakeActionClient(),
+        streaming_publisher_factory=lambda msg_type, topic, qos: publisher,
+        streaming_message_factory=FakeStreamingMessage,
     )
 
     assert bridge.open()
     assert bridge.current_command_position == 0
-    assert len(fake_client.goals) == 1
-    goal = fake_client.goals[0]
-    assert goal.command.position == pytest.approx(0.0)
-    assert goal.command.max_effort == pytest.approx(10.0)
+    assert len(publisher.messages) == 1
+    message = publisher.messages[0]
+    assert message.target_position == 0
+    assert message.speed == 8
+    assert message.max_effort == pytest.approx(10.0)
 
 
-def test_close_step_updates_position_and_sends_goal() -> None:
-    """close_step advances the internal byte estimate and sends mapped action position."""
-    fake_client = FakeActionClient()
+def test_close_step_publishes_streaming_command_with_suggested_speed() -> None:
+    """close_step should stream the updated target and derived speed byte."""
+    publisher = FakeStreamingPublisher()
     bridge = CommandBridge(
         FakeNode(),
         make_params(),
-        action_client_factory=lambda node, action_type, action_name: fake_client,
+        action_client_factory=lambda node, action_type, action_name: FakeActionClient(),
+        streaming_publisher_factory=lambda msg_type, topic, qos: publisher,
+        streaming_message_factory=FakeStreamingMessage,
     )
 
-    assert bridge.close_step(10)
-    assert bridge.current_command_position == 10
-    goal = fake_client.goals[0]
-    assert goal.command.position == pytest.approx(10 / 255 * 0.8)
+    assert bridge.close_step(1)
+    assert bridge.current_command_position == 1
+    message = publisher.messages[0]
+    assert message.target_position == 1
+    assert message.speed == 20
 
 
-def test_dry_run_does_not_send_goal() -> None:
-    """dry_run still updates the estimate but does not create an action goal."""
+def test_dry_run_does_not_send_goal_or_stream() -> None:
+    """dry_run still updates the estimate but does not create outbound commands."""
     bridge = CommandBridge(FakeNode(), make_params(dry_run=True))
 
     assert bridge.close_step(10)
     assert bridge.current_command_position == 10
     assert bridge.action_client is None
+    assert bridge.streaming_publisher is None
 
 
-def test_action_server_unavailable_is_diagnostic() -> None:
+def test_action_server_unavailable_is_diagnostic_when_streaming_unavailable() -> None:
     """Unavailable action server returns False and records an error."""
     fake_client = FakeActionClient(available=False)
     node = FakeNode()
@@ -122,6 +169,7 @@ def test_action_server_unavailable_is_diagnostic() -> None:
         node,
         make_params(),
         action_client_factory=lambda node, action_type, action_name: fake_client,
+        streaming_publisher_factory=lambda msg_type, topic, qos: None,
     )
 
     assert not bridge.close_step(1)

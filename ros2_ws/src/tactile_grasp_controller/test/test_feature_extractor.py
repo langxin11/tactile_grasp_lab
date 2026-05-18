@@ -5,7 +5,11 @@
 
 from dataclasses import dataclass, field
 
-from tactile_grasp_controller.feature_extractor import extract_tactile_features
+from tactile_grasp_controller.feature_extractor import (
+    extract_normal_force_features,
+    extract_tactile_features,
+    is_tactile_clear,
+)
 
 
 @dataclass
@@ -41,3 +45,34 @@ def test_extract_tactile_features_detects_contact_and_slip() -> None:
     assert features["both_contact"] is True
     assert features["fn_min"] == 3.0
     assert features["slip_detected"] is True
+
+
+def test_extract_normal_force_features_respects_sign_convention() -> None:
+    """法向力提取应遵守左右符号配置。"""
+    params = {
+        "left_normal_sign": -1.0,
+        "right_normal_sign": 1.0,
+    }
+    left = Sensor(gfz=-6.0)
+    right = Sensor(gfz=2.5)
+
+    features = extract_normal_force_features(left, right, params)
+
+    assert features["fn_left"] == 6.0
+    assert features["fn_right"] == 2.5
+    assert features["fn_min"] == 2.5
+
+
+def test_is_tactile_clear_checks_fn_min_against_threshold() -> None:
+    """tactile clear 判定应使用当前口径下的 fn_min。"""
+    params = {
+        "left_normal_sign": 1.0,
+        "right_normal_sign": 1.0,
+    }
+    left = Sensor(gfz=1.5)
+    right = Sensor(gfz=4.5)
+
+    tactile_clear, normal_features = is_tactile_clear(left, right, params, threshold_n=2.0)
+
+    assert tactile_clear is True
+    assert normal_features["fn_min"] == 1.5

@@ -7,8 +7,10 @@ tactile_grasp_controller:
     left_tactile_topic: "/hub_0/sensor_0"
     right_tactile_topic: "/hub_0/sensor_1"
 
-    # 新主路径：controller 通过标准 GripperCommand action 控制夹爪。
+    # 兼容路径：保留标准 GripperCommand action 作为初始化和手工控制入口。
     gripper_command_action: "/robotiq_gripper_controller/gripper_cmd"
+    # 闭环主路径：controller 通过 streaming topic 持续刷新位置和建议速度。
+    streaming_command_topic: "/robotiq/command/stream"
     gripper_open_position: 0.0
     gripper_closed_position: 0.8
     gripper_max_effort: 10.0
@@ -24,8 +26,17 @@ tactile_grasp_controller:
     state_topic: "/tactile_grasp/state"
 
     # 运行频率：
-    # 第一版保持 20 Hz，避免 Robotiq 被当作高频力控执行器。
-    control_rate_hz: 20.0
+    # 当前真机闭环默认推荐 40 Hz。
+    # 现阶段不建议直接上 100 Hz。
+    control_rate_hz: 40.0
+
+    # 速度建议映射：
+    # requested_rate = step * control_rate_hz
+    # 当 requested_rate 达到 target_command_rate_bytes_per_s 时，
+    # streaming 速度映射会饱和到 max_speed_byte。
+    target_command_rate_bytes_per_s: 80.0
+    min_speed_byte: 8
+    max_speed_byte: 32
 
     # auto_start:
     # false 时节点启动后停在 IDLE，需要手工调用 /tactile_grasp/start。
@@ -34,6 +45,8 @@ tactile_grasp_controller:
     # 安全默认值：
     # true 时 controller 会照常算特征和状态机，但不会真的发夹爪命令。
     dry_run: true
+    require_clear_tactile_on_start: true
+    start_force_threshold_n: 5.0
 
     # 左右触觉消息超时时间。
     # 任一侧长时间没新数据，controller 会进入 FAULT。
@@ -51,7 +64,7 @@ tactile_grasp_controller:
     # compensate 用于滑移或摩擦裕度不足时的小步补夹。
     approach_position_step: 1
     preload_position_step: 1
-    compensate_position_step: 2
+    compensate_position_step: 1
 
     # 命令位置边界：
     # initial_position 是 controller 对“当前命令位置”的初始估计，不是真实反馈。

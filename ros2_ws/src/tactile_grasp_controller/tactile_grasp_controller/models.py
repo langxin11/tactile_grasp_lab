@@ -16,8 +16,10 @@ class ControlAction:
         name: 动作名称，如 "close_step"、"hold"、"open"、"fault"。
         step: 闭合步长（仅 close_step 动作有效）。
         reason: 执行该动作的原因描述。
+        suggested_speed: 建议的速度字节；0 表示使用默认映射。
     """
 
     name: str
     step: int = 0
     reason: str = ""
+    suggested_speed: int = 0

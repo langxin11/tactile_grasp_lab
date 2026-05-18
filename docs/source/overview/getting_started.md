@@ -53,6 +53,20 @@ ros2 launch tactile_grasp_controller tactile_grasp_bringup.launch.py
 ros2 launch tactile_grasp_controller tactile_grasp_hardware_bringup.launch.py
 ```
 
+默认不会自动进入闭环；更稳的方式是 bringup 完成后再手动启动：
+
+```bash
+ros2 service call /tactile_grasp/start std_srvs/srv/Trigger "{}"
+```
+
+如果已经确认串口、法向符号和限位参数正确，也可以：
+
+```bash
+ros2 launch tactile_grasp_controller tactile_grasp_hardware_bringup.launch.py \
+  use_fake_gripper:=false \
+  auto_grasp:=true
+```
+
 更细的真机联调步骤、安全检查与故障处理流程见 [硬件联调](../hardware/bringup.md)。
 
 ## 构建本文档

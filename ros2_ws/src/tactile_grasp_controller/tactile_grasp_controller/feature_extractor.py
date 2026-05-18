@@ -37,6 +37,53 @@ def _safe_min(values: list[float], fallback: float) -> float:
     return min(finite) if finite else fallback
 
 
+def extract_normal_force_features(
+    left_msg: Any, right_msg: Any, params: dict[str, Any]
+) -> dict[str, float]:
+    """Extract normal-force features using the controller's sign convention.
+
+    Args:
+        left_msg: 左侧传感器消息。
+        right_msg: 右侧传感器消息。
+        params: 参数字典，至少包含 `left_normal_sign` 与 `right_normal_sign`。
+
+    Returns:
+        包含 `fn_left`、`fn_right`、`fn_min` 与 `fn_avg` 的字典。
+    """
+    fn_left = max(0.0, float(params["left_normal_sign"]) * float(getattr(left_msg, "gfz", 0.0)))
+    fn_right = max(
+        0.0,
+        float(params["right_normal_sign"]) * float(getattr(right_msg, "gfz", 0.0)),
+    )
+    return {
+        "fn_left": fn_left,
+        "fn_right": fn_right,
+        "fn_min": min(fn_left, fn_right),
+        "fn_avg": 0.5 * (fn_left + fn_right),
+    }
+
+
+def is_tactile_clear(
+    left_msg: Any,
+    right_msg: Any,
+    params: dict[str, Any],
+    threshold_n: float,
+) -> tuple[bool, dict[str, float]]:
+    """Check whether both fingertips are below the allowed start-force threshold.
+
+    Args:
+        left_msg: 左侧传感器消息。
+        right_msg: 右侧传感器消息。
+        params: 触觉特征参数字典。
+        threshold_n: 允许的 `fn_min` 上限。
+
+    Returns:
+        `(是否清零, 法向力特征字典)`。
+    """
+    normal_features = extract_normal_force_features(left_msg, right_msg, params)
+    return normal_features["fn_min"] <= float(threshold_n), normal_features
+
+
 def extract_tactile_features(
     left_msg: Any, right_msg: Any, params: dict[str, Any]
 ) -> dict[str, Any]:
@@ -71,10 +118,11 @@ def extract_tactile_features(
     )
 
     # ==== 法向力（允许符号反转） ====
-    fn_left = max(0.0, float(params["left_normal_sign"]) * float(getattr(left_msg, "gfz", 0.0)))
-    fn_right = max(0.0, float(params["right_normal_sign"]) * float(getattr(right_msg, "gfz", 0.0)))
-    fn_min = min(fn_left, fn_right)
-    fn_avg = 0.5 * (fn_left + fn_right)
+    normal_features = extract_normal_force_features(left_msg, right_msg, params)
+    fn_left = normal_features["fn_left"]
+    fn_right = normal_features["fn_right"]
+    fn_min = normal_features["fn_min"]
+    fn_avg = normal_features["fn_avg"]
 
     # ==== 切向力 ====
     ft_left = math.hypot(float(getattr(left_msg, "gfx", 0.0)), float(getattr(left_msg, "gfy", 0.0)))

@@ -24,6 +24,8 @@ from sensor_interfaces.srv import BiasRequest
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
 
+from .startup_gating import tactile_clear_status
+
 
 class HardwareBringupCoordinator(Node):
     """协调触觉降噪校准、夹爪激活和初始打开动作。
@@ -40,9 +42,13 @@ class HardwareBringupCoordinator(Node):
 
         self.left_seen = False
         self.right_seen = False
+        self.left_msg: SensorState | None = None
+        self.right_msg: SensorState | None = None
         self.left_time_s: float | None = None
         self.right_time_s: float | None = None
         self.stable_since_s: float | None = None
+        self.clear_since_s: float | None = None
+        self.clear_deadline_s: float | None = None
         self.wait_until_s: float | None = None
 
         self.phase = "wait_tactile"
@@ -93,6 +99,10 @@ class HardwareBringupCoordinator(Node):
             "perform_bias": True,
             "tactile_stable_s": 1.0,
             "bias_settle_s": 0.5,
+            "post_open_settle_s": 0.5,
+            "start_force_threshold_n": 5.0,
+            "start_force_stable_s": 0.5,
+            "start_force_timeout_s": 5.0,
             "bias_service": "/hub_0/send_bias_request",
             "gripper_activate_service": "/robotiq/activate",
             "gripper_command_action": "/robotiq_gripper_controller/gripper_cmd",
@@ -102,8 +112,9 @@ class HardwareBringupCoordinator(Node):
             "service_timeout_s": 5.0,
             "action_timeout_s": 5.0,
             "call_controller_start": False,
-            "post_open_settle_s": 0.5,
             "controller_start_service": "/tactile_grasp/start",
+            "left_normal_sign": 1.0,
+            "right_normal_sign": 1.0,
         }
         for name, value in defaults.items():
             self.declare_parameter(name, value)
@@ -111,13 +122,13 @@ class HardwareBringupCoordinator(Node):
 
     def on_left_tactile(self, msg: SensorState) -> None:
         """左侧传感器消息回调，标记已收到并记录时间。"""
-        del msg
+        self.left_msg = msg
         self.left_seen = True
         self.left_time_s = time.monotonic()
 
     def on_right_tactile(self, msg: SensorState) -> None:
         """右侧传感器消息回调，标记已收到并记录时间。"""
-        del msg
+        self.right_msg = msg
         self.right_seen = True
         self.right_time_s = time.monotonic()
 
@@ -157,6 +168,25 @@ class HardwareBringupCoordinator(Node):
         if self.left_time_s is None or self.right_time_s is None:
             return False
         return True
+
+    def reset_tactile_clear_window(self) -> None:
+        """Reset the tactile-clear timers for the post-open startup gate."""
+        self.clear_since_s = None
+        self.clear_deadline_s = None
+
+    def tactile_clear_status(self, now_s: float) -> tuple[bool, dict[str, float] | None, str]:
+        """Check whether tactile readings are below the configured start threshold."""
+        tactile_clear, normal_features, detail, self.clear_since_s, self.clear_deadline_s = (
+            tactile_clear_status(
+                self.left_msg,
+                self.right_msg,
+                self.params,
+                clear_since_s=self.clear_since_s,
+                clear_deadline_s=self.clear_deadline_s,
+                now_s=now_s,
+            )
+        )
+        return tactile_clear, normal_features, detail
 
     def start_wait(self, phase: str, delay_s: float, detail: str) -> None:
         """进入等待阶段，延迟指定秒数后继续。
@@ -311,21 +341,17 @@ class HardwareBringupCoordinator(Node):
             if not result.reached_goal and not result.stalled:
                 self.fail("gripper open action did not reach goal")
                 return
-            if bool(self.params["call_controller_start"]):
-                settle_s = float(self.params["post_open_settle_s"])
-                if settle_s > 0.0:
-                    self.start_wait(
-                        "wait_open_settle",
-                        settle_s,
-                        "gripper opened; waiting before controller start",
-                    )
-                    return
-                if self.call_trigger(
-                    self.start_controller_client, "controller start", "wait_controller_start"
-                ):
-                    return
+            settle_s = float(self.params["post_open_settle_s"])
+            if settle_s > 0.0:
+                self.reset_tactile_clear_window()
+                self.start_wait(
+                    "wait_post_open_settle",
+                    settle_s,
+                    "gripper opened; waiting for mechanical settling before tactile bias",
+                )
                 return
-            self.finish_success("hardware bringup completed; controller remains in IDLE")
+            self.reset_tactile_clear_window()
+            self.call_bias()
             return
 
         # ==== 根据动作类型推进流程 ====
@@ -333,10 +359,11 @@ class HardwareBringupCoordinator(Node):
             if not response.result:
                 self.fail("tactile bias request returned false")
                 return
+            self.reset_tactile_clear_window()
             self.start_wait(
                 "wait_bias_settle",
                 float(self.params["bias_settle_s"]),
-                "tactile bias completed; waiting for readings to settle",
+                "tactile bias completed; waiting before tactile-clear gate",
             )
             return
 
@@ -372,7 +399,9 @@ class HardwareBringupCoordinator(Node):
         # ==== wait_tactile: 等待触觉流 ====
         if self.phase == "wait_tactile":
             if not self.tactile_ready():
-                self.publish_status("wait_tactile", "waiting for left/right tactile streams")
+                self.publish_status(
+                    "wait_tactile_streams", "waiting for left/right tactile streams"
+                )
                 return
             if self.stable_since_s is None:
                 self.stable_since_s = now_s
@@ -380,12 +409,9 @@ class HardwareBringupCoordinator(Node):
             stable_target = float(self.params["tactile_stable_s"])
             if stable_elapsed < stable_target:
                 self.publish_status(
-                    "wait_tactile",
+                    "wait_tactile_streams",
                     f"tactile streams detected; stabilizing for {stable_target:.1f}s",
                 )
-                return
-            if bool(self.params["perform_bias"]):
-                self.call_bias()
                 return
             self.call_trigger(
                 self.activate_gripper_client, "gripper activate", "wait_gripper_activate"
@@ -397,27 +423,65 @@ class HardwareBringupCoordinator(Node):
             if self.wait_until_s is None or now_s < self.wait_until_s:
                 self.publish_status(
                     "wait_bias_settle",
-                    "waiting after tactile bias before gripper activation",
+                    "waiting after tactile bias before tactile-clear gate",
                 )
                 return
             self.wait_until_s = None
-            self.call_trigger(
-                self.activate_gripper_client, "gripper activate", "wait_gripper_activate"
+            self.phase = "wait_tactile_clear"
+            self.publish_status(
+                "wait_tactile_clear",
+                "waiting for tactile baseline to remain below start-force threshold",
             )
             return
 
-        # ==== wait_open_settle: 等待夹爪打开稳定 ====
-        if self.phase == "wait_open_settle":
+        # ==== wait_post_open_settle: 等待夹爪打开稳定 ====
+        if self.phase == "wait_post_open_settle":
             if self.wait_until_s is None or now_s < self.wait_until_s:
                 self.publish_status(
-                    "wait_open_settle",
-                    "waiting after gripper open before controller start",
+                    "wait_post_open_settle",
+                    "waiting after gripper open before tactile bias",
                 )
                 return
             self.wait_until_s = None
-            self.call_trigger(
-                self.start_controller_client, "controller start", "wait_controller_start"
+            if bool(self.params["perform_bias"]):
+                self.call_bias()
+                return
+            self.phase = "wait_tactile_clear"
+            self.publish_status(
+                "wait_tactile_clear",
+                "waiting for tactile baseline to remain below start-force threshold",
             )
+            return
+
+        if self.phase == "wait_tactile_clear":
+            tactile_clear, normal_features, detail = self.tactile_clear_status(now_s)
+            if tactile_clear:
+                if bool(self.params["call_controller_start"]):
+                    self.call_trigger(
+                        self.start_controller_client,
+                        "controller start",
+                        "wait_controller_start",
+                    )
+                    return
+                self.finish_success(
+                    "hardware bringup completed; gripper ready, tactile cleared, controller remains in IDLE"
+                )
+                return
+
+            if self.clear_deadline_s is not None and now_s > self.clear_deadline_s:
+                if normal_features is None:
+                    self.fail("tactile clear timeout waiting for sensor messages")
+                    return
+                self.fail(
+                    "tactile clear timeout: "
+                    f"fn_left={normal_features['fn_left']:.3f}, "
+                    f"fn_right={normal_features['fn_right']:.3f}, "
+                    f"fn_min={normal_features['fn_min']:.3f}, "
+                    f"threshold={float(self.params['start_force_threshold_n']):.3f}"
+                )
+                return
+
+            self.publish_status("wait_tactile_clear", detail)
             return
 
         self.publish_status(self.phase, "waiting for next bringup step")

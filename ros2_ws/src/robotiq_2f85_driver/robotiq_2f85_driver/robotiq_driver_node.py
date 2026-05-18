@@ -22,7 +22,7 @@ from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.action.server import ServerGoalHandle
 from rclpy.executors import SingleThreadedExecutor
 from rclpy.lifecycle import LifecycleNode, TransitionCallbackReturn
-from sensor_interfaces.msg import GripperStatus
+from sensor_interfaces.msg import GripperStatus, GripperStreamingCommand
 from std_msgs.msg import Int32
 from std_srvs.srv import Trigger
 
@@ -101,6 +101,7 @@ class RobotiqDriverNode(LifecycleNode):
         self.command_echo_pub = None
         self.status_pub = None
         self.position_subscription = None
+        self.streaming_subscription = None
         self.action_server: ActionServer | None = None
         self.activate_service = None
         self.open_service = None
@@ -118,6 +119,9 @@ class RobotiqDriverNode(LifecycleNode):
         self._last_feedback_signature: tuple[int, int, int, int, int] | None = None
         self._last_status_key: tuple[str, str, bool, bool, bool] | None = None
         self._last_error_detail: str | None = None
+        self._streaming_command_lock = threading.Lock()
+        self._latest_streaming_command: GripperStreamingCommand | None = None
+        self._last_streaming_command_id = 0
 
     def _declare_parameters(self) -> None:
         """声明默认参数。
@@ -134,9 +138,11 @@ class RobotiqDriverNode(LifecycleNode):
             "startup_activate": False,
             "dry_run": True,
             "command_topic": "/robotiq/command/position",
+            "streaming_command_topic": "/robotiq/command/stream",
             "command_echo_topic": "/robotiq/command/echo",
             "status_topic": "/robotiq/driver/status",
             "feedback_poll_hz": 10.0,
+            "streaming_update_hz": 50.0,
             "gripper_action_name": "/robotiq_gripper_controller/gripper_cmd",
             "gripper_closed_position": 0.8,
             "action_max_force": 235.0,
@@ -162,9 +168,11 @@ class RobotiqDriverNode(LifecycleNode):
             "startup_activate",
             "dry_run",
             "command_topic",
+            "streaming_command_topic",
             "command_echo_topic",
             "status_topic",
             "feedback_poll_hz",
+            "streaming_update_hz",
             "gripper_action_name",
             "gripper_closed_position",
             "action_max_force",
@@ -177,6 +185,7 @@ class RobotiqDriverNode(LifecycleNode):
         params["default_force"] = clamp_byte(params["default_force"], "default_force")
         params["action_position_tolerance"] = max(0, int(params["action_position_tolerance"]))
         params["feedback_poll_hz"] = max(0.0, float(params["feedback_poll_hz"]))
+        params["streaming_update_hz"] = max(0.0, float(params["streaming_update_hz"]))
         return params
 
     def on_configure(self, state: Any) -> TransitionCallbackReturn:
@@ -216,6 +225,12 @@ class RobotiqDriverNode(LifecycleNode):
                 Int32,
                 str(self.params["command_topic"]),
                 self.on_position_command,
+                10,
+            )
+            self.streaming_subscription = self.create_subscription(
+                GripperStreamingCommand,
+                str(self.params["streaming_command_topic"]),
+                self.on_streaming_command,
                 10,
             )
             self.activate_service = self.create_service(
@@ -305,6 +320,9 @@ class RobotiqDriverNode(LifecycleNode):
         if self.position_subscription is not None:
             self.destroy_subscription(self.position_subscription)
             self.position_subscription = None
+        if self.streaming_subscription is not None:
+            self.destroy_subscription(self.streaming_subscription)
+            self.streaming_subscription = None
         for service_name in (
             "activate_service",
             "open_service",
@@ -380,17 +398,19 @@ class RobotiqDriverNode(LifecycleNode):
             None: 无返回值。
         """
         next_poll_s = time.monotonic()
+        next_stream_s = time.monotonic()
         while not self._worker_stop.is_set():
-            timeout = None
-            if self.params:
-                poll_hz = float(self.params["feedback_poll_hz"])
-                if poll_hz > 0.0:
-                    timeout = max(0.0, next_poll_s - time.monotonic())
+            timeout = self._worker_timeout_s(next_poll_s, next_stream_s)
             try:
                 request = self._worker_queue.get(timeout=timeout)
             except queue.Empty:
-                self._poll_feedback()
-                next_poll_s = time.monotonic() + self._poll_period_s()
+                now_s = time.monotonic()
+                if now_s >= next_stream_s:
+                    self._process_streaming_command()
+                    next_stream_s = now_s + self._streaming_period_s()
+                if now_s >= next_poll_s:
+                    self._poll_feedback()
+                    next_poll_s = now_s + self._poll_period_s()
                 continue
             if request is None:
                 return
@@ -402,7 +422,22 @@ class RobotiqDriverNode(LifecycleNode):
             else:
                 request.future.set_result(result)
             finally:
-                next_poll_s = time.monotonic() + self._poll_period_s()
+                now_s = time.monotonic()
+                next_poll_s = now_s + self._poll_period_s()
+                next_stream_s = now_s + self._streaming_period_s()
+
+    def _worker_timeout_s(self, next_poll_s: float, next_stream_s: float) -> float | None:
+        """Return the next worker timeout based on polling and streaming cadence."""
+        deadlines = []
+        poll_period = self._poll_period_s()
+        if poll_period > 0.0:
+            deadlines.append(next_poll_s)
+        stream_period = self._streaming_period_s()
+        if stream_period > 0.0:
+            deadlines.append(next_stream_s)
+        if not deadlines:
+            return None
+        return max(0.0, min(deadlines) - time.monotonic())
 
     def _poll_period_s(self) -> float:
         """计算反馈轮询周期。
@@ -412,6 +447,45 @@ class RobotiqDriverNode(LifecycleNode):
         """
         poll_hz = float(self.params.get("feedback_poll_hz", 0.0))
         return (1.0 / poll_hz) if poll_hz > 0.0 else 1.0
+
+    def _streaming_period_s(self) -> float:
+        """计算 streaming 命令刷新周期。"""
+        update_hz = float(self.params.get("streaming_update_hz", 0.0))
+        return (1.0 / update_hz) if update_hz > 0.0 else 0.0
+
+    def _clear_streaming_command(self) -> None:
+        """Clear the latest pending streaming command."""
+        with self._streaming_command_lock:
+            self._latest_streaming_command = None
+
+    def _process_streaming_command(self) -> None:
+        """Apply the newest streaming command without waiting for motion completion."""
+        if not self._publishers_active or self.core is None:
+            return
+        if not self._ready_for_motion or self._command_busy:
+            return
+        with self._streaming_command_lock:
+            command = self._latest_streaming_command
+        if command is None:
+            return
+        command_id = int(command.command_id)
+        if command_id <= self._last_streaming_command_id:
+            return
+        target = clamp_byte(int(command.target_position), "target_position")
+        requested_speed = int(command.speed)
+        if requested_speed <= 0:
+            speed = int(self.params["default_speed"])
+        else:
+            speed = clamp_byte(requested_speed, "speed")
+        force = map_effort_to_force_byte(
+            float(command.max_effort),
+            float(self.params["action_max_force"]),
+            int(self.params["default_force"]),
+        )
+        self.core.move(position=target, speed=speed, force=force)
+        self.publish_echo(target)
+        self.publish_status("streaming", f"stream target {target} speed {speed}")
+        self._last_streaming_command_id = command_id
 
     def _poll_feedback(self) -> None:
         """轮询并发布当前反馈状态。
@@ -709,6 +783,7 @@ class RobotiqDriverNode(LifecycleNode):
         Returns:
             None: 无返回值。
         """
+        self._clear_streaming_command()
         target = clamp_byte(msg.data, "position")
         accepted, message, future = self._submit_background_command(
             "topic_move",
@@ -719,6 +794,15 @@ class RobotiqDriverNode(LifecycleNode):
         if not accepted:
             self.publish_status("error", message, force=True)
             self.get_logger().error(message)
+
+    def on_streaming_command(self, msg: GripperStreamingCommand) -> None:
+        """Cache the latest streaming command for the worker loop."""
+        if self.core is None or not self._publishers_active:
+            return
+        with self._streaming_command_lock:
+            if int(msg.command_id) < self._last_streaming_command_id:
+                return
+            self._latest_streaming_command = msg
 
     def _handle_service_queue(
         self,
@@ -796,6 +880,7 @@ class RobotiqDriverNode(LifecycleNode):
             Trigger.Response: 填充后的响应对象。
         """
         del request
+        self._clear_streaming_command()
         return self._handle_service_queue(
             response,
             "open",
@@ -814,6 +899,7 @@ class RobotiqDriverNode(LifecycleNode):
             Trigger.Response: 填充后的响应对象。
         """
         del request
+        self._clear_streaming_command()
         return self._handle_service_queue(
             response,
             "close",
@@ -832,6 +918,7 @@ class RobotiqDriverNode(LifecycleNode):
             Trigger.Response: 填充后的响应对象。
         """
         del request
+        self._clear_streaming_command()
         return self._handle_service_queue(
             response,
             "stop",
@@ -870,6 +957,7 @@ class RobotiqDriverNode(LifecycleNode):
         Returns:
             GoalResponse: 是否接受该目标。
         """
+        self._clear_streaming_command()
         if self.core is None or not self._publishers_active:
             return GoalResponse.REJECT
         if not self._ready_for_motion:

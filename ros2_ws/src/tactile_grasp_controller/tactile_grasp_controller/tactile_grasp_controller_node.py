@@ -20,6 +20,7 @@ from std_srvs.srv import Trigger
 from .command_bridge import CommandBridge
 from .fault_guard import update_consecutive_limit_counter
 from .feature_extractor import extract_tactile_features
+from .startup_gating import evaluate_start_tactile_gate
 from .state_machine import TactileGraspStateMachine
 
 # 可选导入：sensor_interfaces 未加入工作空间或底层 overlay 时降级。
@@ -107,6 +108,7 @@ class TactileGraspControllerNode(Node):
             "left_tactile_topic": "/hub_0/sensor_0",
             "right_tactile_topic": "/hub_0/sensor_1",
             "gripper_command_action": "/robotiq_gripper_controller/gripper_cmd",
+            "streaming_command_topic": "/robotiq/command/stream",
             "gripper_open_position": 0.0,
             "gripper_closed_position": 0.8,
             "gripper_max_effort": 10.0,
@@ -115,15 +117,20 @@ class TactileGraspControllerNode(Node):
             "gripper_command_echo_topic": "/robotiq/command/echo",
             "debug_topic": "/tactile_grasp/debug",
             "state_topic": "/tactile_grasp/state",
-            "control_rate_hz": 20.0,
+            "control_rate_hz": 40.0,
+            "target_command_rate_bytes_per_s": 80.0,
+            "min_speed_byte": 8,
+            "max_speed_byte": 32,
             "auto_start": False,
             "dry_run": True,
+            "require_clear_tactile_on_start": True,
+            "start_force_threshold_n": 5.0,
             "tactile_timeout_s": 0.2,
             "left_normal_sign": 1.0,
             "right_normal_sign": 1.0,
             "approach_position_step": 1,
             "preload_position_step": 1,
-            "compensate_position_step": 2,
+            "compensate_position_step": 1,
             "min_position": 0,
             "max_position": 255,
             "initial_position": 0,
@@ -180,6 +187,13 @@ class TactileGraspControllerNode(Node):
     def on_start(self, request: Trigger.Request, response: Trigger.Response) -> Trigger.Response:
         """启动控制器服务回调。"""
         del request
+        allowed, message = evaluate_start_tactile_gate(
+            self.left_msg,
+            self.right_msg,
+            self.params,
+        )
+        if not allowed:
+            return self._response(False, message, response)
         self.state_machine.start()
         return self._response(True, "controller started", response)
 

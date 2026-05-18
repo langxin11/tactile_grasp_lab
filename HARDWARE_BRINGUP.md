@@ -74,7 +74,7 @@ source install/setup.bash
 如果工作区有改动，先重建：
 
 ```bash
-cd /home/xiaodalaing/project/robotiq2f85_control
+cd /home/xiaodalaing/project/tactile_grasp_lab
 ./scripts/build_ros2.sh
 cd ros2_ws
 source install/setup.bash
@@ -92,7 +92,10 @@ source install/setup.bash
 当前仓库已经提供单独的真机 launch：
 
 ```bash
-ros2 launch tactile_grasp_controller tactile_grasp_hardware_bringup.launch.py
+ros2 launch tactile_grasp_controller tactile_grasp_hardware_bringup.launch.py \
+  com_port:=/dev/ttyACM0 \
+  gripper_com_port:=/dev/ttyUSB0 \
+  use_fake_gripper:=false
 ```
 
 它会按顺序完成：
@@ -101,21 +104,57 @@ ros2 launch tactile_grasp_controller tactile_grasp_hardware_bringup.launch.py
 2. 启动 `robotiq_2f85_driver`
 3. 启动 `tactile_grasp_controller`
 4. 等待左右触觉 topic 开始稳定刷新
-5. 调用 `/hub_0/send_bias_request`
-6. 调用 `/robotiq/activate`
-7. 调用 `/robotiq/open`
+5. 调用 `/robotiq/activate`
+6. 等待 `/robotiq_gripper_controller/gripper_cmd`
+7. 发送一次 gripper open action goal
+8. 等待 open 后的机械扰动衰减
+9. 调用 `/hub_0/send_bias_request`
+10. 等待触觉连续回到低载基线
 
 相关配置文件：
 
-- [robotiq_2f85_driver.hardware.yaml](/home/xiaodalaing/project/robotiq2f85_control/ros2_ws/src/robotiq_2f85_driver/config/robotiq_2f85_driver.hardware.yaml)
-- [tactile_grasp_controller.hardware.yaml](/home/xiaodalaing/project/robotiq2f85_control/ros2_ws/src/tactile_grasp_controller/config/tactile_grasp_controller.hardware.yaml)
-- [hardware_bringup_coordinator.yaml](/home/xiaodalaing/project/robotiq2f85_control/ros2_ws/src/tactile_grasp_controller/config/hardware_bringup_coordinator.yaml)
+- [robotiq_2f85_driver.yaml](/home/xiaodalaing/project/tactile_grasp_lab/ros2_ws/src/robotiq_2f85_driver/config/robotiq_2f85_driver.yaml)
+- [robotiq_2f85_driver.hardware.yaml](/home/xiaodalaing/project/tactile_grasp_lab/ros2_ws/src/robotiq_2f85_driver/config/robotiq_2f85_driver.hardware.yaml)
+- [tactile_grasp_controller.yaml](/home/xiaodalaing/project/tactile_grasp_lab/ros2_ws/src/tactile_grasp_controller/config/tactile_grasp_controller.yaml)
+- [tactile_grasp_controller.hardware.yaml](/home/xiaodalaing/project/tactile_grasp_lab/ros2_ws/src/tactile_grasp_controller/config/tactile_grasp_controller.hardware.yaml)
+- [hardware_bringup_coordinator.yaml](/home/xiaodalaing/project/tactile_grasp_lab/ros2_ws/src/tactile_grasp_controller/config/hardware_bringup_coordinator.yaml)
 
 默认行为是：
 
 - controller 用真机参数启动，但 `auto_start: false`
 - bringup 不自动调用 `/tactile_grasp/start`
-- 联调结束时系统停在“夹爪已激活并张开、触觉已 bias、controller 仍在 IDLE”
+- 联调结束时系统停在“夹爪已激活并张开、触觉已清零、controller 仍在 IDLE”
+
+这里有一个关键时序约束：
+
+- Robotiq 激活阶段可能经历一次完全闭合校验
+- 这段接触力不能直接作为闭环判断依据
+- 因此当前推荐流程不是“先 bias 再 activate”，而是“activate -> open -> settle -> bias -> tactile clear -> start”
+
+进入真实闭环抓取推荐两种方式：
+
+1. 两阶段方式：
+
+```bash
+ros2 launch tactile_grasp_controller tactile_grasp_hardware_bringup.launch.py \
+  com_port:=/dev/ttyACM0 \
+  gripper_com_port:=/dev/ttyUSB0 \
+  use_fake_gripper:=false
+
+ros2 service call /tactile_grasp/start std_srvs/srv/Trigger "{}"
+```
+
+2. 参数已确认后的一步自动闭环：
+
+```bash
+ros2 launch tactile_grasp_controller tactile_grasp_hardware_bringup.launch.py \
+  com_port:=/dev/ttyACM0 \
+  gripper_com_port:=/dev/ttyUSB0 \
+  use_fake_gripper:=false \
+  auto_grasp:=true
+```
+
+首次真机闭环建议始终用第一种方式。
 
 如果你还在做单层排查，也可以继续按下面的分阶段步骤单独启动每一层。
 
@@ -187,7 +226,7 @@ ros2 topic echo /hub_0/sensor_1
 
 确认文件：
 
-- [robotiq_2f85_driver.yaml](/home/xiaodalaing/project/robotiq2f85_control/ros2_ws/src/robotiq_2f85_driver/config/robotiq_2f85_driver.yaml)
+- [robotiq_2f85_driver.yaml](/home/xiaodalaing/project/tactile_grasp_lab/ros2_ws/src/robotiq_2f85_driver/config/robotiq_2f85_driver.yaml)
 
 首次真机联调建议：
 
@@ -214,13 +253,20 @@ ros2 topic echo /robotiq/driver/status
 
 ### 5.3 再切到真实 driver
 
-把 `robotiq_2f85_driver.yaml` 中：
+推荐不要直接改基础 YAML，而是用 launch 参数或真机覆盖配置：
 
-```yaml
-dry_run: false
+```bash
+ros2 launch robotiq_2f85_driver robotiq_2f85_driver.launch.py \
+  serial_port:=/dev/ttyUSB0 \
+  dry_run:=false
 ```
 
-然后重新启动 driver。
+或者：
+
+```bash
+ros2 launch robotiq_2f85_driver robotiq_2f85_driver.launch.py \
+  config_override:=/home/xiaodalaing/project/tactile_grasp_lab/ros2_ws/src/robotiq_2f85_driver/config/robotiq_2f85_driver.hardware.yaml
+```
 
 ### 5.4 手工发最小命令
 
@@ -271,7 +317,7 @@ ros2 service call /robotiq/stop std_srvs/srv/Trigger "{}"
 
 文件：
 
-- [tactile_grasp_controller.yaml](/home/xiaodalaing/project/robotiq2f85_control/ros2_ws/src/tactile_grasp_controller/config/tactile_grasp_controller.yaml)
+- [tactile_grasp_controller.yaml](/home/xiaodalaing/project/tactile_grasp_lab/ros2_ws/src/tactile_grasp_controller/config/tactile_grasp_controller.yaml)
 
 首次联调建议：
 
@@ -405,13 +451,13 @@ ros2 launch tactile_grasp_controller tactile_grasp_bringup.launch.py \
 说明：
 
 - 这里的 `com_port` 是触觉传感器串口
-- Robotiq 串口来自 `robotiq_2f85_driver.yaml`
+- Robotiq 串口默认来自 launch 参数 `gripper_com_port`
 
 如果需要只启动部分链路：
 
 ```bash
 ros2 launch tactile_grasp_controller tactile_grasp_bringup.launch.py start_sensor:=false
-ros2 launch tactile_grasp_controller tactile_grasp_bringup.launch.py start_driver:=false
+ros2 launch tactile_grasp_controller tactile_grasp_bringup.launch.py start_gripper_execution:=false
 ros2 launch tactile_grasp_controller tactile_grasp_bringup.launch.py start_controller:=false
 ```
 
@@ -421,10 +467,10 @@ ros2 launch tactile_grasp_controller tactile_grasp_bringup.launch.py start_contr
 
 切换顺序建议：
 
-1. `driver.dry_run: false`
-2. `controller.dry_run: true`
+1. 保持 `controller` 仍走基础配置，确认传感器和 driver 都稳定
+2. 把 `driver` 切到真机
 3. 先确认 driver 真机没问题
-4. 再把 `controller.dry_run: false`
+4. 再让 `controller` 叠加真机覆盖配置
 
 不要同时第一次把两边都改成真机。
 
@@ -438,7 +484,7 @@ ros2 launch tactile_grasp_controller tactile_grasp_bringup.launch.py start_contr
 
 ### 推荐第一次真机闭环流程
 
-1. 启动整套链路
+1. 启动真机初始化链路
 2. 观察触觉消息稳定
 3. 观察 driver 状态正常
 4. 调用 `/tactile_grasp/start`

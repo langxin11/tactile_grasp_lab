@@ -7,8 +7,8 @@ robotiq_2f85_driver:
     slave_address: 9
 
     # 默认速度和力度：
-    # 第一版保持保守小值，避免激活或闭合时动作过猛。
-    default_speed: 10
+    # 当前默认值按 40 Hz / step=1 的平滑接触目标校准。
+    default_speed: 16
     default_force: 10
 
     # 启动后是否自动执行 activate。
@@ -17,12 +17,14 @@ robotiq_2f85_driver:
 
     # 安全默认值：
     # true 时只维护命令回显，不真正写串口。
-    dry_run: false
+    dry_run: true
 
     # ROS2 接口：
     # /robotiq/command/position 接收控制器或人工发布的位置命令。
+    # /robotiq/command/stream 是闭环主路径，用于持续刷新目标位置和建议速度。
     # /robotiq/command/echo 发布最近一次接受的命令位置，不是硬件实测位置。
     command_topic: "/robotiq/command/position"
+    streaming_command_topic: "/robotiq/command/stream"
     command_echo_topic: "/robotiq/command/echo"
     status_topic: "/robotiq/driver/status"
     gripper_action_name: "/robotiq_gripper_controller/gripper_cmd"
@@ -31,6 +33,7 @@ robotiq_2f85_driver:
     # Robotiq 2F-85 在激活后如果超过约 1 秒没有通信，可能报 0x09 故障。
     # 因此真机模式需要持续读状态寄存器做保活。
     feedback_poll_hz: 10.0
+    streaming_update_hz: 50.0
 
     # Action 语义映射：
     # action position 的闭合端和 max_effort 的物理上限。

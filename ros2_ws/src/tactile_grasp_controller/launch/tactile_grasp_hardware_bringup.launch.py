@@ -18,6 +18,13 @@ def generate_launch_description() -> LaunchDescription:
         [
             FindPackageShare("tactile_grasp_controller"),
             "config",
+            "tactile_grasp_controller.yaml",
+        ]
+    )
+    controller_config_override_default = PathJoinSubstitution(
+        [
+            FindPackageShare("tactile_grasp_controller"),
+            "config",
             "tactile_grasp_controller.hardware.yaml",
         ]
     )
@@ -54,6 +61,10 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument("gripper_baudrate", default_value="115200"),
         DeclareLaunchArgument("use_fake_gripper", default_value="false"),
         DeclareLaunchArgument("controller_config", default_value=controller_config_default),
+        DeclareLaunchArgument(
+            "controller_config_override",
+            default_value=controller_config_override_default,
+        ),
         DeclareLaunchArgument("coordinator_config", default_value=coordinator_config_default),
     ]
 
@@ -75,6 +86,7 @@ def generate_launch_description() -> LaunchDescription:
             "gripper_baudrate": LaunchConfiguration("gripper_baudrate"),
             "use_fake_gripper": LaunchConfiguration("use_fake_gripper"),
             "controller_config": LaunchConfiguration("controller_config"),
+            "controller_config_override": LaunchConfiguration("controller_config_override"),
         }.items(),
     )
 

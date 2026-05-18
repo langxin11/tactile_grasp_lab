@@ -130,6 +130,11 @@ ros2 launch tactile_grasp_controller tactile_grasp_bringup.launch.py
 - `robotiq_2f85_driver`
 - `tactile_grasp_controller`
 
+当前默认控制语义是：
+
+- 初始化、open goal 和手工单次动作走 `GripperCommand` action
+- 触觉闭环主路径走 `/robotiq/command/stream`
+
 ### 一键启动真机初始化链路
 
 ```bash
@@ -146,12 +151,39 @@ ros2 launch tactile_grasp_controller tactile_grasp_hardware_bringup.launch.py
 - 启动 `robotiq_2f85_driver`
 - 启动 `tactile_grasp_controller`
 - 等待左右触觉流稳定
-- 调用 `/hub_0/send_bias_request`
 - 调用 `/robotiq/activate`
 - 等待 `/robotiq_gripper_controller/gripper_cmd`
 - 发送一次 gripper open action goal
+- 等待 `post_open_settle_s` 的机械扰动衰减
+- 调用 `/hub_0/send_bias_request`
+- 等待触觉连续回到低载基线
 
-默认不会自动调用 `/tactile_grasp/start`，也就是说系统会停在“传感器已归零、夹爪已就绪、controller 仍在 IDLE”的安全状态。
+默认不会自动调用 `/tactile_grasp/start`，也就是说系统会停在“夹爪已就绪、触觉已清零、controller 仍在 IDLE”的安全状态。
+
+进入真实闭环抓取有两种方式：
+
+1. 更稳的两阶段方式
+
+```bash
+ros2 launch tactile_grasp_controller tactile_grasp_hardware_bringup.launch.py \
+  com_port:=/dev/ttyACM0 \
+  gripper_com_port:=/dev/ttyUSB0 \
+  use_fake_gripper:=false
+
+ros2 service call /tactile_grasp/start std_srvs/srv/Trigger "{}"
+```
+
+2. 已确认参数无误后的一步自动进入闭环
+
+```bash
+ros2 launch tactile_grasp_controller tactile_grasp_hardware_bringup.launch.py \
+  com_port:=/dev/ttyACM0 \
+  gripper_com_port:=/dev/ttyUSB0 \
+  use_fake_gripper:=false \
+  auto_grasp:=true
+```
+
+首次真机闭环建议始终使用第一种方式。
 
 ### 常用参数
 
@@ -221,7 +253,7 @@ ros2 launch tactile_grasp_controller tactile_grasp_bringup.launch.py start_contr
 
 ## 真机联调
 
-真机分阶段联调手册见：
+真机分阶段联调、闭环启动步骤与故障排查统一见：
 
 - [HARDWARE_BRINGUP.md](/home/xiaodalaing/project/tactile_grasp_lab/HARDWARE_BRINGUP.md)
 

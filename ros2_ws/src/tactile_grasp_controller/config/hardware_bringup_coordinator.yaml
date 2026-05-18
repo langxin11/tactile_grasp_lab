@@ -5,10 +5,14 @@ hardware_bringup_coordinator:
     right_tactile_topic: "/hub_0/sensor_1"
     status_topic: "/tactile_grasp/hardware_bringup_status"
 
-    # 真机 bringup 时先等待传感器稳定，再做 bias。
+    # 真机 bringup 时先确认触觉流存在，再在夹爪 open 后重新做 bias。
     perform_bias: true
     tactile_stable_s: 1.0
     bias_settle_s: 0.5
+    post_open_settle_s: 0.5
+    start_force_threshold_n: 5.0
+    start_force_stable_s: 0.5
+    start_force_timeout_s: 5.0
     bias_service: "/hub_0/send_bias_request"
 
     # 新夹爪执行层：
@@ -20,10 +24,9 @@ hardware_bringup_coordinator:
     gripper_max_effort: 10.0
     wait_for_action_server_s: 2.0
 
-    # 默认不自动启动 controller 闭环，只把系统带到“传感器归零 + 夹爪就绪”状态。
-    # 自动抓取时，open 后再等 post_open_settle_s，避开启动瞬时尖峰。
+    # 默认不自动启动 controller 闭环，只把系统带到“夹爪 ready + 触觉已清零”状态。
+    # 自动抓取时，也必须先通过触觉低载门控。
     call_controller_start: false
-    post_open_settle_s: 0.5
     controller_start_service: "/tactile_grasp/start"
 
     # 单次服务或 action 等待超时。
